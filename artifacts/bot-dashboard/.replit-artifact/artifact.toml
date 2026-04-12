@@ -1,0 +1,39 @@
+kind = "web"
+previewPath = "/"
+title = "GEM Bot Dashboard"
+version = "1.0.0"
+id = "artifacts/bot-dashboard"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25712
+
+[services.development]
+run = "pnpm --filter @workspace/bot-dashboard run dev"
+
+[services.production]
+
+[services.production.build]
+args = ["node", "build-production.mjs"]
+
+[services.production.build.env]
+NODE_ENV = "production"
+
+[services.production.run]
+args = ["node", "start-production.mjs"]
+
+[services.production.run.env]
+NODE_ENV = "production"
+
+[services.production.health.startup]
+path = "/api/healthz"
+
+[services.env]
+PORT = "25712"
+BASE_PATH = "/"

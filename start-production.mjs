@@ -1,6 +1,7 @@
 /**
  * Production launcher — starts both the API server and Discord bot in parallel.
- * Both run in the same always-on VM instance for 24/7 uptime.
+ * The API server handles all HTTP traffic (API routes + static dashboard files).
+ * The Discord bot runs alongside it for 24/7 uptime.
  */
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -36,7 +37,7 @@ startProcess(
   "API Server",
   "node",
   ["--enable-source-maps", "artifacts/api-server/dist/index.mjs"],
-  { PORT: "8080", NODE_ENV: "production" }
+  { NODE_ENV: "production" }
 );
 
 startProcess(
