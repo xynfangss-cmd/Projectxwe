@@ -57,7 +57,7 @@ export async function addCredits(userId: string, guildId: string, amount: number
   const newTotalEarned = user.totalCreditsEarned + Math.max(0, amount);
   const newRank = getRankForCredits(newTotalEarned);
 
-  // XP from credits
+  // XP from gems
   const newXpFromCredits = Math.floor(newTotalEarned / 10_000) * 100;
   const currentXpFromCredits = Math.floor(user.totalCreditsEarned / 10_000) * 100;
   const xpGained = newXpFromCredits - currentXpFromCredits;

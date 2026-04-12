@@ -32,7 +32,7 @@ export const data = new SlashCommandBuilder()
       .setName("add")
       .setDescription("Add an item to the shop (admin)")
       .addStringOption((opt) => opt.setName("name").setDescription("Item name").setRequired(true))
-      .addIntegerOption((opt) => opt.setName("price").setDescription("Price in credits").setRequired(true).setMinValue(1))
+      .addIntegerOption((opt) => opt.setName("price").setDescription("Price in gems").setRequired(true).setMinValue(1))
       .addStringOption((opt) => opt.setName("description").setDescription("Item description").setRequired(false))
       .addRoleOption((opt) => opt.setName("role").setDescription("Role to grant on purchase").setRequired(false))
       .addStringOption((opt) => opt.setName("emoji").setDescription("Emoji for the item").setRequired(false))
@@ -93,7 +93,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     if (user.credits < item.price) {
       await interaction.editReply({
         embeds: [new EmbedBuilder().setColor(0xed4245).setTitle("❌ Not Enough Credits")
-          .setDescription(`You need **${formatNumber(item.price)}** credits but have **${formatNumber(user.credits)}**.`).setTimestamp()],
+          .setDescription(`You need **${formatNumber(item.price)}** gems but have **${formatNumber(user.credits)}**.`).setTimestamp()],
       });
       return;
     }
@@ -112,8 +112,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       .setTitle(`${item.emoji} Purchase Successful!`)
       .setDescription(`You bought **${item.name}**!`)
       .addFields(
-        { name: "Cost", value: `💰 ${formatNumber(item.price)} credits`, inline: true },
-        { name: "Balance", value: `💰 ${formatNumber(user.credits - item.price)} credits`, inline: true },
+        { name: "Cost", value: `💰 ${formatNumber(item.price)} gems`, inline: true },
+        { name: "Balance", value: `💰 ${formatNumber(user.credits - item.price)} gems`, inline: true },
         item.roleId ? { name: "Role Granted", value: `<@&${item.roleId}>`, inline: true } : { name: "\u200b", value: "\u200b", inline: true }
       )
       .setTimestamp();
@@ -142,7 +142,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       description,
       roleId: role?.id,
       emoji,
-      currency: "credits",
+      currency: "gems",
     });
 
     const embed = new EmbedBuilder()
@@ -151,7 +151,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       .addFields(
         { name: "ID", value: `#${item.id}`, inline: true },
         { name: "Name", value: `${emoji} ${name}`, inline: true },
-        { name: "Price", value: `${formatNumber(price)} credits`, inline: true }
+        { name: "Price", value: `${formatNumber(price)} gems`, inline: true }
       )
       .setTimestamp();
     await interaction.editReply({ embeds: [embed] });

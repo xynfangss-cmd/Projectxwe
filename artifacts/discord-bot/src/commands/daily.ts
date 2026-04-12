@@ -4,7 +4,7 @@ import { DAILY_COOLDOWN_MS, formatNumber, formatTime } from "../utils/constants.
 
 export const data = new SlashCommandBuilder()
   .setName("daily")
-  .setDescription("Claim your daily credits reward");
+  .setDescription("Claim your daily gems reward");
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply();
@@ -48,11 +48,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     .setColor(0x57f287)
     .setTitle("🎁 Daily Reward Claimed!")
     .addFields(
-      { name: "Base Reward", value: `💰 ${formatNumber(base)} credits`, inline: true },
-      { name: "Streak Bonus", value: `🔥 +${formatNumber(streakBonus)} credits`, inline: true },
-      { name: "Total", value: `✨ **${formatNumber(total)} credits**`, inline: true },
+      { name: "Base Reward", value: `💰 ${formatNumber(base)} gems`, inline: true },
+      { name: "Streak Bonus", value: `🔥 +${formatNumber(streakBonus)} gems`, inline: true },
+      { name: "Total", value: `✨ **${formatNumber(total)} gems**`, inline: true },
       { name: "Streak", value: `🔥 **${newStreak}** day${newStreak !== 1 ? "s" : ""} ${newStreak >= 7 ? "🏆" : ""}`, inline: true },
-      { name: "New Balance", value: `💰 ${formatNumber(newCredits)} credits`, inline: true },
+      { name: "New Balance", value: `💰 ${formatNumber(newCredits)} gems`, inline: true },
     )
     .setDescription(streakBroken && user.dailyStreak > 1 ? "Your streak was reset. Come back daily to build it up!" : newStreak === 1 ? "Welcome back! Keep claiming daily to build your streak for bonus rewards!" : `Keep it up! Streak bonus increases each day!`)
     .setTimestamp();

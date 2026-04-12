@@ -13,11 +13,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
         name: "Economy",
         value: [
           "`/balance` — Check your wallet & bank",
-          "`/daily` — Claim daily credits (streak bonuses!)",
+          "`/daily` — Claim daily gems (streak bonuses!)",
           "`/weekly` — Claim weekly bonus",
-          "`/work` — Work a job for credits (1h cooldown)",
+          "`/work` — Work a job for gems (1h cooldown)",
           "`/crime` — Attempt crime for bigger rewards (2h cooldown)",
-          "`/transfer` — Send credits to another user",
+          "`/transfer` — Send gems to another user",
         ].join("\n"),
         inline: false,
       },
@@ -45,7 +45,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
         name: "Banking",
         value: [
           "`/bank balance` — View bank account",
-          "`/bank deposit` — Move credits to bank",
+          "`/bank deposit` — Move gems to bank",
           "`/bank withdraw` — Withdraw from bank",
           "`/bank interest` — Collect 5% daily interest",
         ].join("\n"),
@@ -62,7 +62,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
         inline: false,
       },
     )
-    .setFooter({ text: "Earn 5–25 credits per message • Every 10k credits = 100 XP" })
+    .setFooter({ text: "Earn 5–25 gems per message • Every 10k gems = 100 XP" })
     .setTimestamp();
 
   await interaction.reply({ embeds: [embed], ephemeral: true });

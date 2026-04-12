@@ -15,7 +15,7 @@ import {
 
 export const data = new SlashCommandBuilder()
   .setName("rank")
-  .setDescription("View your rank, credits, XP, and progress")
+  .setDescription("View your rank, gems, XP, and progress")
   .addUserOption((opt) =>
     opt.setName("user").setDescription("Check another user's rank").setRequired(false)
   );
@@ -76,7 +76,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       {
         name: nextRank ? `Rank Progress → ${nextRank.emoji} ${nextRank.name}` : "Max Rank Achieved",
         value: nextRank
-          ? `\`${creditsProgress}\` ${formatNumber(Math.max(0, creditsToNext))} credits to next rank`
+          ? `\`${creditsProgress}\` ${formatNumber(Math.max(0, creditsToNext))} gems to next rank`
           : `You've reached the highest rank!`,
         inline: false,
       },

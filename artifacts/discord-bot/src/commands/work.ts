@@ -9,7 +9,7 @@ import {
 
 export const data = new SlashCommandBuilder()
   .setName("work")
-  .setDescription("Work a job to earn credits (1 hour cooldown)");
+  .setDescription("Work a job to earn gems (1 hour cooldown)");
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply();
@@ -54,7 +54,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     .setDescription(message)
     .addFields(
       { name: "Job", value: `${job.emoji} ${job.title}`, inline: true },
-      { name: "Earned", value: `💰 **${formatNumber(earned)} credits**`, inline: true },
+      { name: "Earned", value: `💰 **${formatNumber(earned)} gems**`, inline: true },
       { name: "Next Shift", value: `⏰ In 1 hour`, inline: true }
     )
     .setTimestamp();

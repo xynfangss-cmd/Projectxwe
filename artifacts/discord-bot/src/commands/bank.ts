@@ -31,8 +31,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       `Welcome, **${interaction.user.displayName}**!\nWhat would you like to do today?`
     )
     .addFields(
-      { name: "💰 Wallet", value: `${formatNumber(user.credits)} credits`, inline: true },
-      { name: "🏦 Bank", value: `${formatNumber(bank.balance)} credits`, inline: true },
+      { name: "💰 Wallet", value: `${formatNumber(user.credits)} gems`, inline: true },
+      { name: "🏦 Bank", value: `${formatNumber(bank.balance)} gems`, inline: true },
     )
     .setFooter({ text: "Choose an option below" })
     .setTimestamp();

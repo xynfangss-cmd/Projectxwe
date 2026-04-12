@@ -31,14 +31,14 @@ export const data = new SlashCommandBuilder()
   .addSubcommand((sub) =>
     sub
       .setName("addcredits")
-      .setDescription("Give a user credits")
+      .setDescription("Give a user gems")
       .addUserOption((opt) => opt.setName("user").setDescription("Target user").setRequired(true))
       .addIntegerOption((opt) => opt.setName("amount").setDescription("Amount").setRequired(true))
   )
   .addSubcommand((sub) =>
     sub
       .setName("removecredits")
-      .setDescription("Remove credits from a user")
+      .setDescription("Remove gems from a user")
       .addUserOption((opt) => opt.setName("user").setDescription("Target user").setRequired(true))
       .addIntegerOption((opt) => opt.setName("amount").setDescription("Amount").setRequired(true).setMinValue(1))
   )
@@ -129,7 +129,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const target = interaction.options.getUser("user", true);
     await updateUser(target.id, guildId, {
       credits: 0,
-      gems: 0,
+      credits: 0,
       xp: 0,
       level: 1,
       rank: "Member",

@@ -76,7 +76,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const embed = buildGiveawayEmbed(giveaway.id, prize, description, winners, entryCost, endsAt, interaction.user.id, []);
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId(`giveaway_enter_${giveaway.id}`).setLabel(entryCost > 0 ? `Enter (${formatNumber(entryCost)} credits)` : "Enter Giveaway").setStyle(ButtonStyle.Success).setEmoji("🎉")
+      new ButtonBuilder().setCustomId(`giveaway_enter_${giveaway.id}`).setLabel(entryCost > 0 ? `Enter (${formatNumber(entryCost)} gems)` : "Enter Giveaway").setStyle(ButtonStyle.Success).setEmoji("🎉")
     );
 
     const msg = await channel.send({ embeds: [embed], components: [row] });
@@ -157,7 +157,7 @@ export function buildGiveawayEmbed(
     .addFields(
       { name: "Ends", value: `<t:${Math.floor(endsAt.getTime() / 1000)}:R>`, inline: true },
       { name: "Winners", value: `${winners}`, inline: true },
-      { name: "Entry Cost", value: entryCost > 0 ? `${formatNumber(entryCost)} credits` : "Free", inline: true },
+      { name: "Entry Cost", value: entryCost > 0 ? `${formatNumber(entryCost)} gems` : "Free", inline: true },
       { name: "Entries", value: `${entrants.length}`, inline: true },
       { name: "Hosted by", value: `<@${hostedBy}>`, inline: true },
       { name: "ID", value: `#${id}`, inline: true }

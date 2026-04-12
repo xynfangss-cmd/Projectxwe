@@ -31,7 +31,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       .setColor(0xed4245)
       .setTitle("❌ Not Enough XP")
       .setDescription(
-        `You need **${CHEST_COST_XP} XP** to open a chest.\nYou currently have **${formatNumber(user.xp)} XP**.\n\nEarn more XP by chatting — every 10,000 credits earns you 100 XP!`
+        `You need **${CHEST_COST_XP} XP** to open a chest.\nYou currently have **${formatNumber(user.xp)} XP**.\n\nEarn more XP by chatting — every 10,000 gems earns you 100 XP!`
       )
       .setTimestamp();
     await interaction.editReply({ embeds: [embed] });
@@ -96,7 +96,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
     const rewardDesc =
       creditsWon > 0
-        ? `**+${formatNumber(creditsWon)} credits**`
+        ? `**+${formatNumber(creditsWon)} gems**`
         : `**+${formatNumber(xpWon)} XP**`;
 
     const resultEmbed = new EmbedBuilder()

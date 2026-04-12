@@ -11,14 +11,14 @@ export const data = new SlashCommandBuilder()
       .setDescription("Leaderboard type")
       .setRequired(false)
       .addChoices(
-        { name: "Credits (default)", value: "credits" },
+        { name: "Credits (default)", value: "gems" },
         { name: "XP / Level", value: "xp" }
       )
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply();
-  const type = interaction.options.getString("type") ?? "credits";
+  const type = interaction.options.getString("type") ?? "gems";
   const guildId = interaction.guildId!;
 
   const users =
@@ -30,7 +30,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const embed = new EmbedBuilder()
       .setColor(0x5865f2)
       .setTitle("🏆 Leaderboard")
-      .setDescription("No users found yet. Start chatting to earn credits!")
+      .setDescription("No users found yet. Start chatting to earn gems!")
       .setTimestamp();
     await interaction.editReply({ embeds: [embed] });
   }
@@ -42,7 +42,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     if (type === "xp") {
       return `${medal} <@${u.userId}> ${rank.emoji} — **${formatNumber(u.xp)} XP** (Lv.${u.level})`;
     }
-    return `${medal} <@${u.userId}> ${rank.emoji} — **${formatNumber(u.totalCreditsEarned)}** credits`;
+    return `${medal} <@${u.userId}> ${rank.emoji} — **${formatNumber(u.totalCreditsEarned)}** gems`;
   });
 
   const embed = new EmbedBuilder()

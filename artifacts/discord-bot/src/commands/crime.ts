@@ -75,8 +75,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       .setTitle("🚔 Busted!")
       .setDescription(scenario)
       .addFields(
-        { name: "Fine Paid", value: `💸 ${formatNumber(fine)} credits`, inline: true },
-        { name: "New Balance", value: `💰 ${formatNumber(newCredits)} credits`, inline: true }
+        { name: "Fine Paid", value: `💸 ${formatNumber(fine)} gems`, inline: true },
+        { name: "New Balance", value: `💰 ${formatNumber(newCredits)} gems`, inline: true }
       )
       .setTimestamp();
     await interaction.editReply({ embeds: [embed] });
@@ -97,8 +97,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     .setTitle(titles[outcome.type] ?? "Crime Successful!")
     .setDescription(scenario)
     .addFields(
-      { name: "Stolen", value: `💰 **${formatNumber(gain)} credits**`, inline: true },
-      { name: "New Balance", value: `💰 ${formatNumber(user.credits + gain)} credits`, inline: true }
+      { name: "Stolen", value: `💰 **${formatNumber(gain)} gems**`, inline: true },
+      { name: "New Balance", value: `💰 ${formatNumber(user.credits + gain)} gems`, inline: true }
     )
     .setTimestamp();
 

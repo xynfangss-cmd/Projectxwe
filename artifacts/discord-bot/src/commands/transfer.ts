@@ -4,10 +4,10 @@ import { formatNumber } from "../utils/constants.js";
 
 export const data = new SlashCommandBuilder()
   .setName("transfer")
-  .setDescription("Transfer credits to another user")
+  .setDescription("Transfer gems to another user")
   .addUserOption((opt) => opt.setName("user").setDescription("User to transfer to").setRequired(true))
   .addIntegerOption((opt) =>
-    opt.setName("amount").setDescription("Amount of credits to transfer").setRequired(true).setMinValue(1)
+    opt.setName("amount").setDescription("Amount of gems to transfer").setRequired(true).setMinValue(1)
   )
   .addStringOption((opt) =>
     opt.setName("note").setDescription("Optional note").setRequired(false)
@@ -35,14 +35,14 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   if (fromUser.credits < amount) {
     await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(0xed4245).setTitle("❌ Insufficient Credits").setDescription(`You only have **${formatNumber(fromUser.credits)}** credits.`).setTimestamp()],
+      embeds: [new EmbedBuilder().setColor(0xed4245).setTitle("❌ Insufficient Credits").setDescription(`You only have **${formatNumber(fromUser.credits)}** gems.`).setTimestamp()],
     });
   }
 
   await Promise.all([
     updateUser(fromId, guildId, { credits: fromUser.credits - amount }),
     updateUser(target.id, guildId, { credits: toUser.credits + amount }),
-    logTransaction(guildId, target.id, amount, "credits", "transfer", fromId, note),
+    logTransaction(guildId, target.id, amount, "gems", "transfer", fromId, note),
   ]);
 
   const embed = new EmbedBuilder()
@@ -51,7 +51,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     .addFields(
       { name: "From", value: `<@${fromId}>`, inline: true },
       { name: "To", value: `<@${target.id}>`, inline: true },
-      { name: "Amount", value: `💰 **${formatNumber(amount)} credits**`, inline: true },
+      { name: "Amount", value: `💰 **${formatNumber(amount)} gems**`, inline: true },
     );
 
   if (note) embed.addFields({ name: "Note", value: note, inline: false });

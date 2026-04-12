@@ -4,7 +4,7 @@ import { WEEKLY_COOLDOWN_MS, formatNumber, formatTime } from "../utils/constants
 
 export const data = new SlashCommandBuilder()
   .setName("weekly")
-  .setDescription("Claim your weekly credits bonus");
+  .setDescription("Claim your weekly gems bonus");
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply();
@@ -42,7 +42,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     .setColor(0x5865f2)
     .setTitle("📅 Weekly Bonus Claimed!")
     .addFields(
-      { name: "Credits", value: `💰 **${formatNumber(base)}** credits`, inline: true },
+      { name: "Credits", value: `💰 **${formatNumber(base)}** gems`, inline: true },
       { name: "XP Bonus", value: `🌟 **+${xpBonus} XP**`, inline: true },
       { name: "New Balance", value: `💰 ${formatNumber(newCredits)} | 🌟 ${formatNumber(newXp)} XP`, inline: false }
     )

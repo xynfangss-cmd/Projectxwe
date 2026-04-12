@@ -27,9 +27,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     .setTitle(`💼 ${target.username}'s Balance`)
     .setThumbnail(target.displayAvatarURL({ size: 64 }))
     .addFields(
-      { name: "Wallet", value: `💰 **${formatNumber(user.credits)}** credits`, inline: true },
-      { name: "Bank", value: `🏦 **${formatNumber(bank.balance)}** credits`, inline: true },
-      { name: "Total", value: `💎 **${formatNumber(total)}** credits`, inline: true },
+      { name: "Wallet", value: `💰 **${formatNumber(user.credits)}** gems`, inline: true },
+      { name: "Bank", value: `🏦 **${formatNumber(bank.balance)}** gems`, inline: true },
+      { name: "Total", value: `💎 **${formatNumber(total)}** gems`, inline: true },
       { name: "XP", value: `🌟 ${formatNumber(user.xp)} XP`, inline: true },
       { name: "Rank", value: `${rank.emoji} ${rank.name}`, inline: true },
       { name: "Level", value: `⭐ Level ${user.level}`, inline: true },

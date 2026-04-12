@@ -86,7 +86,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   if (user.credits < bet) {
     await interaction.editReply({
       embeds: [new EmbedBuilder().setColor(0xed4245).setTitle("❌ Not Enough Credits")
-        .setDescription(`You only have **${formatNumber(user.credits)}** credits.`).setTimestamp()],
+        .setDescription(`You only have **${formatNumber(user.credits)}** gems.`).setTimestamp()],
     });
   }
 

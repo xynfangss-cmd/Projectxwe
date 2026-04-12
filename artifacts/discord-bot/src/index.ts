@@ -69,7 +69,7 @@ client.once(Events.ClientReady, async (c) => {
   console.log(`📊 Serving ${c.guilds.cache.size} guild(s)`);
 
   c.user.setPresence({
-    activities: [{ name: "/help | Earn credits by chatting!", type: ActivityType.Playing }],
+    activities: [{ name: "/help | Earn gems by chatting!", type: ActivityType.Playing }],
     status: "online",
   });
 
@@ -119,9 +119,9 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     ]);
     await interaction.editReply({
       content: [
-        `**💰 Wallet:** ${formatNumber(dbUser.credits)} credits`,
-        `**🏦 Bank:** ${formatNumber(bank.balance)} credits`,
-        `**📊 Total:** ${formatNumber(dbUser.credits + bank.balance)} credits`,
+        `**💰 Wallet:** ${formatNumber(dbUser.credits)} gems`,
+        `**🏦 Bank:** ${formatNumber(bank.balance)} gems`,
+        `**📊 Total:** ${formatNumber(dbUser.credits + bank.balance)} gems`,
       ].join("\n"),
     });
     return;
@@ -235,7 +235,7 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     if (gaw.entryCost > 0) {
       const dbUser = await getOrCreateUser(user.id, guildId!, user.username);
       if (dbUser.credits < gaw.entryCost) {
-        await interaction.editReply({ content: `You need **${formatNumber(gaw.entryCost)}** credits to enter. You have **${formatNumber(dbUser.credits)}**.` });
+        await interaction.editReply({ content: `You need **${formatNumber(gaw.entryCost)}** gems to enter. You have **${formatNumber(dbUser.credits)}**.` });
       }
       await updateUser(user.id, guildId!, { credits: dbUser.credits - gaw.entryCost });
     }
@@ -244,7 +244,7 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     await updateGiveaway(id, { entrantsJson: entrants });
 
     await interaction.editReply({
-      content: `You've entered the giveaway for **${gaw.prize}**! ${gaw.entryCost > 0 ? `(${formatNumber(gaw.entryCost)} credits deducted)` : ""} Good luck! 🎉`,
+      content: `You've entered the giveaway for **${gaw.prize}**! ${gaw.entryCost > 0 ? `(${formatNumber(gaw.entryCost)} gems deducted)` : ""} Good luck! 🎉`,
     });
   }
 }
