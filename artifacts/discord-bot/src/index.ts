@@ -43,6 +43,8 @@ import * as shop from "./commands/shop.js";
 import * as admin from "./commands/admin.js";
 import * as ranks from "./commands/ranks.js";
 import * as help from "./commands/help.js";
+import * as blackjack from "./commands/blackjack.js";
+import * as mines from "./commands/mines.js";
 
 type Command = {
   data: { name: string; toJSON: () => unknown };
@@ -50,7 +52,11 @@ type Command = {
 };
 
 const commands = new Collection<string, Command>();
-const allCommands = [rank, leaderboard, chest, daily, weekly, work, crime, balance, bank, transfer, gamble, giveaway, shop, admin, ranks, help];
+const allCommands = [
+  rank, leaderboard, chest, daily, weekly, work, crime, balance,
+  bank, transfer, gamble, giveaway, shop, admin, ranks, help,
+  blackjack, mines,
+];
 for (const cmd of allCommands) {
   commands.set(cmd.data.name, cmd as Command);
 }
@@ -64,7 +70,7 @@ const client = new Client({
   ],
 });
 
-// Prevent unhandled promise rejections from crashing the process
+// Prevent unhandled errors from crashing the process
 client.on("error", (err) => {
   console.error("[Client Error]", err.message);
 });
@@ -121,7 +127,19 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
 async function handleButton(interaction: ButtonInteraction): Promise<void> {
   const { customId, user, guildId } = interaction;
 
-  // ── Bank: Balance button ────────────────────────────────────────────────
+  // ── Route blackjack buttons ──────────────────────────────────────────────
+  if (customId.startsWith("bj_")) {
+    await blackjack.handleButton(interaction);
+    return;
+  }
+
+  // ── Route mines buttons ──────────────────────────────────────────────────
+  if (customId.startsWith("mines_")) {
+    await mines.handleButton(interaction);
+    return;
+  }
+
+  // ── Bank: Balance button ─────────────────────────────────────────────────
   if (customId === "bank_balance") {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const [dbUser, bankAccount] = await Promise.all([
@@ -141,7 +159,7 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     return;
   }
 
-  // ── Bank: Deposit (open ticket) button ──────────────────────────────────
+  // ── Bank: Deposit (open ticket) button ───────────────────────────────────
   if (customId === "bank_deposit") {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const guild = interaction.guild;
@@ -153,7 +171,6 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     const safeName = user.username.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20);
     const ticketName = `deposit-${safeName}`;
 
-    // Check for existing open ticket
     const existing = guild.channels.cache.find(
       (c) => c.type === ChannelType.GuildText && c.name === ticketName
     );
@@ -164,12 +181,10 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
       return;
     }
 
-    // Find a "Tickets" category if one exists
     const category = guild.channels.cache.find(
       (c) => c.type === ChannelType.GuildCategory && c.name.toLowerCase() === "tickets"
     );
 
-    // Create the private ticket channel
     const ticketChannel = await guild.channels.create({
       name: ticketName,
       type: ChannelType.GuildText,
@@ -217,7 +232,7 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     return;
   }
 
-  // ── Close ticket button ─────────────────────────────────────────────────
+  // ── Close ticket button ──────────────────────────────────────────────────
   if (customId === "close_ticket") {
     const channel = interaction.channel as TextChannel;
     if (!channel?.name?.startsWith("deposit-")) {
@@ -229,7 +244,7 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     return;
   }
 
-  // ── Giveaway entry buttons: giveaway_enter_<id> ─────────────────────────
+  // ── Giveaway entry buttons: giveaway_enter_<id> ──────────────────────────
   if (customId.startsWith("giveaway_enter_")) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const id = parseInt(customId.replace("giveaway_enter_", ""));
@@ -247,7 +262,6 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
       return;
     }
 
-    // Handle entry cost
     if (gaw.entryCost > 0) {
       const dbUser = await getOrCreateUser(user.id, guildId!, user.username);
       if (dbUser.credits < gaw.entryCost) {

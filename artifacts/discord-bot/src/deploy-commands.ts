@@ -17,8 +17,14 @@ import * as shop from "./commands/shop.js";
 import * as admin from "./commands/admin.js";
 import * as ranks from "./commands/ranks.js";
 import * as help from "./commands/help.js";
+import * as blackjack from "./commands/blackjack.js";
+import * as mines from "./commands/mines.js";
 
-const allCommands = [rank, leaderboard, chest, daily, weekly, work, crime, balance, bank, transfer, gamble, giveaway, shop, admin, ranks, help];
+const allCommands = [
+  rank, leaderboard, chest, daily, weekly, work, crime, balance,
+  bank, transfer, gamble, giveaway, shop, admin, ranks, help,
+  blackjack, mines,
+];
 const commandsJSON = allCommands.map((cmd) => cmd.data.toJSON());
 
 const token = process.env.DISCORD_TOKEN;

@@ -66,14 +66,7 @@ export const data = new SlashCommandBuilder()
           .setMinValue(1).setMaxValue(6)
       )
   )
-  .addSubcommand((sub) =>
-    sub
-      .setName("blackjack")
-      .setDescription("Play a quick round of blackjack")
-      .addIntegerOption((opt) =>
-        opt.setName("bet").setDescription("Amount to bet").setRequired(true).setMinValue(100)
-      )
-  );
+  ;
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply();
@@ -85,9 +78,10 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   if (user.credits < bet) {
     await interaction.editReply({
-      embeds: [new EmbedBuilder().setColor(0xed4245).setTitle("❌ Not Enough Credits")
+      embeds: [new EmbedBuilder().setColor(0xed4245).setTitle("❌ Not Enough Gems")
         .setDescription(`You only have **${formatNumber(user.credits)}** gems.`).setTimestamp()],
     });
+    return;
   }
 
   if (sub === "slots") {
@@ -161,52 +155,4 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     await interaction.editReply({ embeds: [embed] });
   }
 
-  if (sub === "blackjack") {
-    function drawCard() {
-      const cards = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11];
-      return cards[Math.floor(Math.random() * cards.length)];
-    }
-    function handValue(cards: number[]) {
-      let total = cards.reduce((a, b) => a + b, 0);
-      let aces = cards.filter((c) => c === 11).length;
-      while (total > 21 && aces > 0) { total -= 10; aces--; }
-      return total;
-    }
-    function cardLabel(v: number) { return v === 11 ? "A" : v === 1 ? "A" : String(v); }
-
-    const playerCards = [drawCard(), drawCard()];
-    const dealerCards = [drawCard(), drawCard()];
-
-    // Player hits on < 17, dealer hits on < 17
-    while (handValue(playerCards) < 17) playerCards.push(drawCard());
-    while (handValue(dealerCards) < 17) dealerCards.push(drawCard());
-
-    const pTotal = handValue(playerCards);
-    const dTotal = handValue(dealerCards);
-    const pBust = pTotal > 21;
-    const dBust = dTotal > 21;
-
-    let result: "win" | "lose" | "push";
-    if (pBust) result = "lose";
-    else if (dBust) result = "win";
-    else if (pTotal > dTotal) result = "win";
-    else if (pTotal < dTotal) result = "lose";
-    else result = "push";
-
-    const net = result === "win" ? bet : result === "push" ? 0 : -bet;
-    const newCredits = user.credits + net;
-    await updateUser(userId, guildId, { credits: newCredits });
-
-    const embed = new EmbedBuilder()
-      .setColor(result === "win" ? 0x57f287 : result === "push" ? 0xfee75c : 0xed4245)
-      .setTitle(`🃏 Blackjack — ${result === "win" ? "You Win!" : result === "push" ? "Push!" : "Dealer Wins"}`)
-      .addFields(
-        { name: `Your Hand (${pTotal})`, value: playerCards.map(cardLabel).join(" "), inline: true },
-        { name: `Dealer Hand (${dTotal})`, value: dealerCards.map(cardLabel).join(" "), inline: true },
-        { name: "Result", value: result === "win" ? `+${formatNumber(bet)}` : result === "push" ? "±0" : `-${formatNumber(bet)}`, inline: true },
-        { name: "Balance", value: `💰 ${formatNumber(newCredits)}`, inline: true }
-      )
-      .setTimestamp();
-    await interaction.editReply({ embeds: [embed] });
-  }
 }
