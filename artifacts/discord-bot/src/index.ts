@@ -13,6 +13,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   TextChannel,
+  MessageFlags,
 } from "discord.js";
 import { handleMessage } from "./systems/messageXP.js";
 import { startGiveawayManager } from "./systems/giveawayManager.js";
@@ -20,7 +21,6 @@ import {
   getOrCreateUser,
   updateUser,
   getOrCreateBankAccount,
-  updateBankAccount,
   getGiveaway,
   updateGiveaway,
 } from "./utils/db.js";
@@ -64,6 +64,15 @@ const client = new Client({
   ],
 });
 
+// Prevent unhandled promise rejections from crashing the process
+client.on("error", (err) => {
+  console.error("[Client Error]", err.message);
+});
+
+process.on("unhandledRejection", (err) => {
+  console.error("[Unhandled Rejection]", err);
+});
+
 client.once(Events.ClientReady, async (c) => {
   console.log(`✅ Logged in as ${c.user.tag}`);
   console.log(`📊 Serving ${c.guilds.cache.size} guild(s)`);
@@ -91,7 +100,7 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
       await command.execute(interaction);
     } catch (err) {
       console.error(`Error in command ${interaction.commandName}:`, err);
-      const msg = { content: "An error occurred while running this command.", ephemeral: true };
+      const msg = { content: "An error occurred while running this command.", flags: MessageFlags.Ephemeral };
       if (interaction.deferred || interaction.replied) {
         await interaction.editReply(msg).catch(() => {});
       } else {
@@ -103,7 +112,9 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
 
   // Handle button interactions
   if (interaction.isButton()) {
-    await handleButton(interaction);
+    await handleButton(interaction).catch((err) => {
+      console.error("[Button Error]", err?.message ?? err);
+    });
   }
 });
 
@@ -112,24 +123,27 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
 
   // ── Bank: Balance button ────────────────────────────────────────────────
   if (customId === "bank_balance") {
-    await interaction.deferReply({ ephemeral: true });
-    const [dbUser, bank] = await Promise.all([
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const [dbUser, bankAccount] = await Promise.all([
       getOrCreateUser(user.id, guildId!, user.username),
       getOrCreateBankAccount(user.id, guildId!),
     ]);
-    await interaction.editReply({
-      content: [
-        `**💰 Wallet:** ${formatNumber(dbUser.credits)} gems`,
-        `**🏦 Bank:** ${formatNumber(bank.balance)} gems`,
-        `**📊 Total:** ${formatNumber(dbUser.credits + bank.balance)} gems`,
-      ].join("\n"),
-    });
+    const embed = new EmbedBuilder()
+      .setColor(0x5865f2)
+      .setTitle("💰 Your Balance")
+      .addFields(
+        { name: "💰 Wallet", value: `${formatNumber(dbUser.credits)} gems`, inline: true },
+        { name: "🏦 Bank", value: `${formatNumber(bankAccount.balance)} gems`, inline: true },
+        { name: "📊 Total", value: `${formatNumber(dbUser.credits + bankAccount.balance)} gems`, inline: true },
+      )
+      .setTimestamp();
+    await interaction.editReply({ embeds: [embed] });
     return;
   }
 
   // ── Bank: Deposit (open ticket) button ──────────────────────────────────
   if (customId === "bank_deposit") {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const guild = interaction.guild;
     if (!guild) {
       await interaction.editReply({ content: "This can only be used inside a server." });
@@ -171,7 +185,7 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
           ],
         },
       ],
-      topic: `Deposit ticket for ${user.tag}`,
+      topic: `Deposit ticket for ${user.username}`,
     });
 
     const ticketEmbed = new EmbedBuilder()
@@ -207,7 +221,7 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
   if (customId === "close_ticket") {
     const channel = interaction.channel as TextChannel;
     if (!channel?.name?.startsWith("deposit-")) {
-      await interaction.reply({ content: "This button can only be used in a deposit ticket.", ephemeral: true });
+      await interaction.reply({ content: "This button can only be used in a deposit ticket.", flags: MessageFlags.Ephemeral });
       return;
     }
     await interaction.reply({ content: "🔒 Closing ticket in 5 seconds..." });
@@ -215,27 +229,32 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     return;
   }
 
-  // Giveaway entry buttons: giveaway_enter_<id>
+  // ── Giveaway entry buttons: giveaway_enter_<id> ─────────────────────────
   if (customId.startsWith("giveaway_enter_")) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const id = parseInt(customId.replace("giveaway_enter_", ""));
     const gaw = await getGiveaway(id);
 
     if (!gaw || !gaw.isActive) {
-      await interaction.editReply({ content: "This giveaway has ended." });
+      await interaction.editReply({ content: "This giveaway has already ended." });
+      return;
     }
 
     const entrants = (gaw.entrantsJson as string[]) ?? [];
 
     if (entrants.includes(user.id)) {
       await interaction.editReply({ content: "You are already entered in this giveaway!" });
+      return;
     }
 
     // Handle entry cost
     if (gaw.entryCost > 0) {
       const dbUser = await getOrCreateUser(user.id, guildId!, user.username);
       if (dbUser.credits < gaw.entryCost) {
-        await interaction.editReply({ content: `You need **${formatNumber(gaw.entryCost)}** gems to enter. You have **${formatNumber(dbUser.credits)}**.` });
+        await interaction.editReply({
+          content: `You need **${formatNumber(gaw.entryCost)}** gems to enter. You only have **${formatNumber(dbUser.credits)}**.`,
+        });
+        return;
       }
       await updateUser(user.id, guildId!, { credits: dbUser.credits - gaw.entryCost });
     }
@@ -244,8 +263,9 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     await updateGiveaway(id, { entrantsJson: entrants });
 
     await interaction.editReply({
-      content: `You've entered the giveaway for **${gaw.prize}**! ${gaw.entryCost > 0 ? `(${formatNumber(gaw.entryCost)} gems deducted)` : ""} Good luck! 🎉`,
+      content: `🎉 You've entered the giveaway for **${gaw.prize}**!${gaw.entryCost > 0 ? ` (${formatNumber(gaw.entryCost)} gems deducted)` : ""} Good luck!`,
     });
+    return;
   }
 }
 

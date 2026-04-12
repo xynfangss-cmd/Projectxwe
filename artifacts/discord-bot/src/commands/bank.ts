@@ -6,36 +6,19 @@ import {
   ButtonBuilder,
   ButtonStyle,
 } from "discord.js";
-import { getOrCreateUser, getOrCreateBankAccount } from "../utils/db.js";
-import { formatNumber } from "../utils/constants.js";
 
 export const data = new SlashCommandBuilder()
   .setName("bank")
-  .setDescription("Open the bank — check your balance or request a deposit");
+  .setDescription("Open the GEM Bank — check your balance or request a deposit");
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply();
-
-  const userId = interaction.user.id;
-  const guildId = interaction.guildId!;
-
-  const [user, bank] = await Promise.all([
-    getOrCreateUser(userId, guildId, interaction.user.username),
-    getOrCreateBankAccount(userId, guildId),
-  ]);
-
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
     .setTitle("🏦 GEM Bank")
     .setDescription(
-      `Welcome, **${interaction.user.displayName}**!\nWhat would you like to do today?`
+      `Welcome, **${interaction.user.displayName}**!\nWhat would you like to do?`
     )
-    .addFields(
-      { name: "💰 Wallet", value: `${formatNumber(user.credits)} gems`, inline: true },
-      { name: "🏦 Bank", value: `${formatNumber(bank.balance)} gems`, inline: true },
-    )
-    .setFooter({ text: "Choose an option below" })
-    .setTimestamp();
+    .setFooter({ text: "Choose an option below" });
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
@@ -50,5 +33,5 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       .setStyle(ButtonStyle.Success)
   );
 
-  await interaction.editReply({ embeds: [embed], components: [row] });
+  await interaction.reply({ embeds: [embed], components: [row] });
 }
