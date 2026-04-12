@@ -11,182 +11,196 @@ import {
 import { getOrCreateUser, updateUser } from "../utils/db.js";
 import { formatNumber } from "../utils/constants.js";
 
-// ── Types ────────────────────────────────────────────────────────────────────
-// 20-tile board (4 rows × 5 cols), 5th row is the Cash Out button
-type TileState = "hidden" | "gem" | "mine";
+// ── Bitmask helpers (20 tiles, indices 0-19) ─────────────────────────────────
+const TOTAL_TILES = 20;
 
-type MinesGame = {
-  board: TileState[];     // 20 tiles
-  isMine: boolean[];      // which tiles are mines (fixed at start)
-  bet: number;
-  mineCount: number;
-  gemsFound: number;
-  userId: string;
-  guildId: string;
-  status: "playing" | "done";
-};
+function bitGet(mask: number, idx: number) { return (mask >> idx) & 1; }
+function bitSet(mask: number, idx: number) { return mask | (1 << idx); }
+function bitCount(mask: number) {
+  let n = 0;
+  for (let i = 0; i < TOTAL_TILES; i++) if ((mask >> i) & 1) n++;
+  return n;
+}
 
-// ── Active games ──────────────────────────────────────────────────────────────
-export const games = new Map<string, MinesGame>();
-
-// ── Multiplier formula ────────────────────────────────────────────────────────
-// Product of (total / safe_remaining) for each reveal, with 3% house edge
-function calcMultiplier(mineCount: number, gemsFound: number, total = 20): number {
+// ── Multiplier (3% house edge) ────────────────────────────────────────────────
+function calcMultiplier(mineCount: number, gemsFound: number): number {
   if (gemsFound === 0) return 1.0;
   let mult = 1.0;
   for (let i = 0; i < gemsFound; i++) {
-    const remaining = total - i;
-    const safeTiles = total - mineCount - i;
-    if (safeTiles <= 0) break;
-    mult *= remaining / safeTiles;
+    const remaining = TOTAL_TILES - i;
+    const safe = TOTAL_TILES - mineCount - i;
+    if (safe <= 0) break;
+    mult *= remaining / safe;
   }
   return parseFloat((mult * 0.97).toFixed(2));
 }
 
-// ── Build the 5-row component layout ─────────────────────────────────────────
-function buildComponents(game: MinesGame, revealAll = false): ActionRowBuilder<ButtonBuilder>[] {
-  const rows: ActionRowBuilder<ButtonBuilder>[] = [];
+// ── CustomId encoding ─────────────────────────────────────────────────────────
+// Tile:    mines_t_{idx}_{ownerId}_{minesBitmask}_{revealedBitmask}_{bet}
+// Cashout: mines_c_{ownerId}_{minesBitmask}_{revealedBitmask}_{bet}
 
-  // Rows 0-3: tiles 0-19 (4 rows × 5 cols)
-  for (let row = 0; row < 4; row++) {
-    const actionRow = new ActionRowBuilder<ButtonBuilder>();
-    for (let col = 0; col < 5; col++) {
-      const idx = row * 5 + col;
-      const state = game.board[idx];
-      const isMineHere = game.isMine[idx];
+function tileId(idx: number, ownerId: string, mines: number, revealed: number, bet: number) {
+  return `mines_t_${idx}_${ownerId}_${mines}_${revealed}_${bet}`;
+}
+function cashoutId(ownerId: string, mines: number, revealed: number, bet: number) {
+  return `mines_c_${ownerId}_${mines}_${revealed}_${bet}`;
+}
 
-      let emoji = "🔲";
-      let style = ButtonStyle.Secondary;
-      let disabled = game.status === "done";
+interface MinesState {
+  idx?: number;
+  ownerId: string;
+  minesBitmask: number;
+  revealedBitmask: number;
+  bet: number;
+}
 
-      if (state === "gem") {
-        emoji = "💎";
-        style = ButtonStyle.Success;
-        disabled = true;
-      } else if (state === "mine") {
-        emoji = "💣";
-        style = ButtonStyle.Danger;
-        disabled = true;
-      } else if (revealAll) {
-        // Reveal all hidden tiles at game end
-        emoji = isMineHere ? "💣" : "💎";
-        style = isMineHere ? ButtonStyle.Danger : ButtonStyle.Success;
-        disabled = true;
-      }
-
-      actionRow.addComponents(
-        new ButtonBuilder()
-          .setCustomId(`mines_tile_${game.userId}_${idx}`)
-          .setEmoji(emoji)
-          .setStyle(style)
-          .setLabel("\u200b")
-          .setDisabled(disabled)
-      );
+function parseMinesId(customId: string): MinesState | null {
+  try {
+    const parts = customId.split("_");
+    if (parts[0] !== "mines") return null;
+    if (parts[1] === "t") {
+      // mines_t_{idx}_{ownerId}_{mines}_{revealed}_{bet}
+      return {
+        idx: parseInt(parts[2]),
+        ownerId: parts[3],
+        minesBitmask: parseInt(parts[4]),
+        revealedBitmask: parseInt(parts[5]),
+        bet: parseInt(parts[6]),
+      };
     }
-    rows.push(actionRow);
-  }
-
-  // Row 4: Cash Out button
-  const mult = calcMultiplier(game.mineCount, game.gemsFound);
-  const winnings = Math.floor(game.bet * mult);
-  const cashOutRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`mines_cashout_${game.userId}`)
-      .setLabel(
-        game.gemsFound > 0
-          ? `Cash Out — ${formatNumber(winnings)} gems (${mult}x)`
-          : "Cash Out"
-      )
-      .setEmoji("💰")
-      .setStyle(ButtonStyle.Success)
-      .setDisabled(game.status === "done" || game.gemsFound === 0)
-  );
-  rows.push(cashOutRow);
-
-  return rows;
+    if (parts[1] === "c") {
+      // mines_c_{ownerId}_{mines}_{revealed}_{bet}
+      return {
+        ownerId: parts[2],
+        minesBitmask: parseInt(parts[3]),
+        revealedBitmask: parseInt(parts[4]),
+        bet: parseInt(parts[5]),
+      };
+    }
+    return null;
+  } catch { return null; }
 }
 
 // ── Build the embed ───────────────────────────────────────────────────────────
 function buildEmbed(
-  game: MinesGame,
-  result?: "cashout" | "exploded"
+  mines: number, revealed: number, mineCount: number,
+  bet: number, result?: "cashout" | "exploded"
 ): EmbedBuilder {
-  const mult = calcMultiplier(game.mineCount, game.gemsFound);
-  const potential = Math.floor(game.bet * mult);
+  const gemsFound = bitCount(revealed & ~mines);
+  const mult = calcMultiplier(mineCount, gemsFound);
+  const potential = Math.floor(bet * mult);
 
-  const colors: Record<string, number> = {
-    cashout: 0x57f287,
-    exploded: 0xed4245,
-  };
-  const color = result ? colors[result] : 0x5865f2;
-
-  const titles: Record<string, string> = {
-    cashout: "💰 Mines — Cashed Out!",
-    exploded: "💣 Mines — BOOM!",
-  };
-  const title = result ? titles[result] : "💣 Mines";
+  const color = result === "cashout" ? 0x57f287 : result === "exploded" ? 0xed4245 : 0x5865f2;
+  const title = result === "cashout" ? "💰 Mines — Cashed Out!" : result === "exploded" ? "💣 Mines — BOOM!" : "💣 Mines";
 
   const embed = new EmbedBuilder()
     .setColor(color)
     .setTitle(title)
     .addFields(
-      { name: "💰 Bet", value: `${formatNumber(game.bet)} gems`, inline: true },
-      { name: "💣 Mines", value: `${game.mineCount}`, inline: true },
-      { name: "💎 Gems Found", value: `${game.gemsFound}`, inline: true }
+      { name: "💰 Bet", value: `${formatNumber(bet)} gems`, inline: true },
+      { name: "💣 Mines", value: `${mineCount}`, inline: true },
+      { name: "💎 Found", value: `${gemsFound}`, inline: true },
     )
     .setTimestamp();
 
   if (result === "cashout") {
-    embed.setDescription(
-      `You cashed out at **${mult}x** for **${formatNumber(potential)} gems**! Smart move. 💰`
-    );
-    embed.addFields({ name: "✅ Payout", value: `+${formatNumber(potential)} gems`, inline: true });
+    embed.setDescription(`Cashed out at **${mult}x** — **+${formatNumber(potential)} gems**! 💰`);
   } else if (result === "exploded") {
-    embed.setDescription(`You hit a mine after finding **${game.gemsFound}** gem(s). Better luck next time! 💥`);
-    embed.addFields({ name: "❌ Lost", value: `-${formatNumber(game.bet)} gems`, inline: true });
+    embed.setDescription(`You hit a mine after ${gemsFound} gem(s). **-${formatNumber(bet)} gems** 💥`);
+  } else if (gemsFound > 0) {
+    embed.setDescription(`**${gemsFound}** gem(s) found — current payout: **${formatNumber(potential)} gems (${mult}x)**\nKeep going or cash out!`);
   } else {
-    embed.setDescription(
-      game.gemsFound > 0
-        ? `**${game.gemsFound}** gem(s) found! Current payout: **${formatNumber(potential)} gems (${mult}x)**\nKeep going or cash out!`
-        : `Find gems without hitting a mine. Cash out anytime to keep your winnings!`
-    );
+    embed.setDescription(`Click tiles to find 💎 gems. Avoid the 💣 mines!\nCash out anytime to lock in your winnings.`);
   }
 
   return embed;
 }
 
-// ── /mines command ────────────────────────────────────────────────────────────
+// ── Build the 5-row button grid ───────────────────────────────────────────────
+function buildComponents(
+  ownerId: string, minesBitmask: number, revealedBitmask: number,
+  bet: number, revealAll = false
+): ActionRowBuilder<ButtonBuilder>[] {
+  const mineCount = bitCount(minesBitmask);
+  const gemsFound = bitCount(revealedBitmask & ~minesBitmask);
+  const mult = calcMultiplier(mineCount, gemsFound);
+  const potential = Math.floor(bet * mult);
+  const done = revealAll;
+
+  const tileRows: ActionRowBuilder<ButtonBuilder>[] = [];
+
+  for (let row = 0; row < 4; row++) {
+    const ar = new ActionRowBuilder<ButtonBuilder>();
+    for (let col = 0; col < 5; col++) {
+      const idx = row * 5 + col;
+      const isRevealed = bitGet(revealedBitmask, idx) === 1;
+      const isMineHere = bitGet(minesBitmask, idx) === 1;
+
+      let emoji: string;
+      let style: ButtonStyle;
+      let disabled: boolean;
+
+      if (isRevealed) {
+        // Already clicked
+        if (isMineHere) {
+          emoji = "💣";
+          style = ButtonStyle.Danger;
+        } else {
+          emoji = "💎";
+          style = ButtonStyle.Success;
+        }
+        disabled = true;
+      } else if (revealAll) {
+        // Game over — show all
+        emoji = isMineHere ? "💣" : "💎";
+        style = isMineHere ? ButtonStyle.Danger : ButtonStyle.Secondary;
+        disabled = true;
+      } else {
+        // Hidden, clickable
+        emoji = "⬛";
+        style = ButtonStyle.Secondary;
+        disabled = done;
+      }
+
+      ar.addComponents(
+        new ButtonBuilder()
+          .setCustomId(tileId(idx, ownerId, minesBitmask, revealedBitmask, bet))
+          .setEmoji(emoji)
+          .setStyle(style)
+          .setDisabled(disabled)
+      );
+    }
+    tileRows.push(ar);
+  }
+
+  // Row 5: Cash Out
+  const cashOutRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(cashoutId(ownerId, minesBitmask, revealedBitmask, bet))
+      .setLabel(gemsFound > 0 ? `Cash Out  ${formatNumber(potential)} gems (${mult}x)` : "Cash Out")
+      .setEmoji("💰")
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(done || gemsFound === 0)
+  );
+  tileRows.push(cashOutRow);
+
+  return tileRows;
+}
+
+// ── /mines slash command ──────────────────────────────────────────────────────
 export const data = new SlashCommandBuilder()
   .setName("mines")
   .setDescription("Play Mines — reveal gems without hitting a bomb!")
   .addIntegerOption((opt) =>
-    opt
-      .setName("bet")
-      .setDescription("Amount of gems to bet")
-      .setRequired(true)
-      .setMinValue(100)
+    opt.setName("bet").setDescription("Amount of gems to bet").setRequired(true).setMinValue(100)
   )
   .addIntegerOption((opt) =>
-    opt
-      .setName("mines")
-      .setDescription("Number of mines on the board (1–15, default 3)")
-      .setRequired(false)
-      .setMinValue(1)
-      .setMaxValue(15)
+    opt.setName("mines").setDescription("Number of mines (1–15, default 3)").setRequired(false).setMinValue(1).setMaxValue(15)
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const userId = interaction.user.id;
   const guildId = interaction.guildId!;
-
-  if (games.has(userId)) {
-    await interaction.reply({
-      content: "You already have an active mines game! Finish it first.",
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
   const bet = interaction.options.getInteger("bet", true);
   const mineCount = interaction.options.getInteger("mines") ?? 3;
 
@@ -199,116 +213,96 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  // Deduct bet upfront
   await updateUser(userId, guildId, { credits: dbUser.credits - bet });
 
-  // Place mines randomly
-  const isMine = Array(20).fill(false);
-  const positions = Array.from({ length: 20 }, (_, i) => i).sort(() => Math.random() - 0.5);
-  for (let i = 0; i < mineCount; i++) isMine[positions[i]] = true;
+  // Randomly place mines
+  let minesBitmask = 0;
+  const shuffled = Array.from({ length: TOTAL_TILES }, (_, i) => i).sort(() => Math.random() - 0.5);
+  for (let i = 0; i < mineCount; i++) minesBitmask = bitSet(minesBitmask, shuffled[i]);
 
-  const game: MinesGame = {
-    board: Array(20).fill("hidden") as TileState[],
-    isMine,
-    bet,
-    mineCount,
-    gemsFound: 0,
-    userId,
-    guildId,
-    status: "playing",
-  };
-  games.set(userId, game);
+  const revealedBitmask = 0;
 
   await interaction.reply({
-    embeds: [buildEmbed(game)],
-    components: buildComponents(game),
+    embeds: [buildEmbed(minesBitmask, revealedBitmask, mineCount, bet)],
+    components: buildComponents(userId, minesBitmask, revealedBitmask, bet),
   });
 }
 
-// ── Button handler ─────────────────────────────────────────────────────────────
+// ── Button handler ────────────────────────────────────────────────────────────
 export async function handleButton(interaction: ButtonInteraction): Promise<void> {
-  const { customId, user } = interaction;
-  const game = games.get(user.id);
+  const state = parseMinesId(interaction.customId);
+  if (!state) return;
 
-  if (!game || game.status === "done") {
-    await interaction.reply({
-      content: "No active mines game. Start one with `/mines`.",
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  if (game.userId !== user.id) {
+  // Ownership check
+  if (state.ownerId !== interaction.user.id) {
     await interaction.reply({ content: "This isn't your game!", flags: MessageFlags.Ephemeral });
     return;
   }
 
+  const { ownerId, minesBitmask, revealedBitmask, bet } = state;
+  const mineCount = bitCount(minesBitmask);
+  const guildId = interaction.guildId!;
+
+  // Acknowledge immediately to avoid "Unknown interaction" timeout
   await interaction.deferUpdate();
 
   // ── CASH OUT ──────────────────────────────────────────────────────────────
-  if (customId.startsWith("mines_cashout_")) {
-    if (game.gemsFound === 0) return;
+  if (interaction.customId.startsWith("mines_c_")) {
+    const gemsFound = bitCount(revealedBitmask & ~minesBitmask);
+    if (gemsFound === 0) return;
 
-    const mult = calcMultiplier(game.mineCount, game.gemsFound);
-    const payout = Math.floor(game.bet * mult);
-    game.status = "done";
-    games.delete(user.id);
+    const mult = calcMultiplier(mineCount, gemsFound);
+    const payout = Math.floor(bet * mult);
 
-    const dbUser = await getOrCreateUser(user.id, game.guildId, "");
-    await updateUser(user.id, game.guildId, { credits: dbUser.credits + payout });
+    const dbUser = await getOrCreateUser(ownerId, guildId, "");
+    await updateUser(ownerId, guildId, { credits: dbUser.credits + payout });
 
     await interaction.editReply({
-      embeds: [buildEmbed(game, "cashout")],
-      components: buildComponents(game, true),
+      embeds: [buildEmbed(minesBitmask, revealedBitmask, mineCount, bet, "cashout")],
+      components: buildComponents(ownerId, minesBitmask, revealedBitmask, bet, true),
     });
     return;
   }
 
   // ── TILE CLICK ────────────────────────────────────────────────────────────
-  if (customId.startsWith("mines_tile_")) {
-    const parts = customId.split("_");
-    const idx = parseInt(parts[parts.length - 1]);
+  if (interaction.customId.startsWith("mines_t_")) {
+    const { idx } = state;
+    if (idx === undefined || idx < 0 || idx >= TOTAL_TILES) return;
+    if (bitGet(revealedBitmask, idx) === 1) return; // already revealed
 
-    if (isNaN(idx) || idx < 0 || idx > 19 || game.board[idx] !== "hidden") return;
+    const newRevealed = bitSet(revealedBitmask, idx);
 
-    if (game.isMine[idx]) {
+    if (bitGet(minesBitmask, idx) === 1) {
       // Hit a mine!
-      game.board[idx] = "mine";
-      game.status = "done";
-      games.delete(user.id);
-
       await interaction.editReply({
-        embeds: [buildEmbed(game, "exploded")],
-        components: buildComponents(game, true),
+        embeds: [buildEmbed(minesBitmask, newRevealed, mineCount, bet, "exploded")],
+        components: buildComponents(ownerId, minesBitmask, newRevealed, bet, true),
       });
       return;
     }
 
-    // Safe tile
-    game.board[idx] = "gem";
-    game.gemsFound++;
+    // Safe tile — check if all safe tiles found
+    const gemsFound = bitCount(newRevealed & ~minesBitmask);
+    const safeTiles = TOTAL_TILES - mineCount;
 
-    // Check if all safe tiles revealed (auto cash out)
-    const safeTiles = 20 - game.mineCount;
-    if (game.gemsFound >= safeTiles) {
-      const mult = calcMultiplier(game.mineCount, game.gemsFound);
-      const payout = Math.floor(game.bet * mult);
-      game.status = "done";
-      games.delete(user.id);
-
-      const dbUser = await getOrCreateUser(user.id, game.guildId, "");
-      await updateUser(user.id, game.guildId, { credits: dbUser.credits + payout });
+    if (gemsFound >= safeTiles) {
+      // Swept the board — auto cash out!
+      const mult = calcMultiplier(mineCount, gemsFound);
+      const payout = Math.floor(bet * mult);
+      const dbUser = await getOrCreateUser(ownerId, guildId, "");
+      await updateUser(ownerId, guildId, { credits: dbUser.credits + payout });
 
       await interaction.editReply({
-        embeds: [buildEmbed(game, "cashout")],
-        components: buildComponents(game, true),
+        embeds: [buildEmbed(minesBitmask, newRevealed, mineCount, bet, "cashout")],
+        components: buildComponents(ownerId, minesBitmask, newRevealed, bet, true),
       });
       return;
     }
 
+    // Update board
     await interaction.editReply({
-      embeds: [buildEmbed(game)],
-      components: buildComponents(game),
+      embeds: [buildEmbed(minesBitmask, newRevealed, mineCount, bet)],
+      components: buildComponents(ownerId, minesBitmask, newRevealed, bet),
     });
     return;
   }
