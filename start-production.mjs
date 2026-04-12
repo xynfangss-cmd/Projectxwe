@@ -37,7 +37,7 @@ startProcess(
   "API Server",
   "node",
   ["--enable-source-maps", "artifacts/api-server/dist/index.mjs"],
-  { NODE_ENV: "production" }
+  { NODE_ENV: "production", PORT: process.env.PORT ?? "8080" }
 );
 
 startProcess(
