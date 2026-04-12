@@ -3,10 +3,16 @@ import {
   GatewayIntentBits,
   Collection,
   Interaction,
-  ComponentType,
   ButtonInteraction,
   Events,
   ActivityType,
+  ChannelType,
+  PermissionFlagsBits,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  TextChannel,
 } from "discord.js";
 import { handleMessage } from "./systems/messageXP.js";
 import { startGiveawayManager } from "./systems/giveawayManager.js";
@@ -103,6 +109,111 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
 
 async function handleButton(interaction: ButtonInteraction): Promise<void> {
   const { customId, user, guildId } = interaction;
+
+  // ── Bank: Balance button ────────────────────────────────────────────────
+  if (customId === "bank_balance") {
+    await interaction.deferReply({ ephemeral: true });
+    const [dbUser, bank] = await Promise.all([
+      getOrCreateUser(user.id, guildId!, user.username),
+      getOrCreateBankAccount(user.id, guildId!),
+    ]);
+    await interaction.editReply({
+      content: [
+        `**💰 Wallet:** ${formatNumber(dbUser.credits)} credits`,
+        `**🏦 Bank:** ${formatNumber(bank.balance)} credits`,
+        `**📊 Total:** ${formatNumber(dbUser.credits + bank.balance)} credits`,
+      ].join("\n"),
+    });
+    return;
+  }
+
+  // ── Bank: Deposit (open ticket) button ──────────────────────────────────
+  if (customId === "bank_deposit") {
+    await interaction.deferReply({ ephemeral: true });
+    const guild = interaction.guild;
+    if (!guild) {
+      await interaction.editReply({ content: "This can only be used inside a server." });
+      return;
+    }
+
+    const safeName = user.username.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20);
+    const ticketName = `deposit-${safeName}`;
+
+    // Check for existing open ticket
+    const existing = guild.channels.cache.find(
+      (c) => c.type === ChannelType.GuildText && c.name === ticketName
+    );
+    if (existing) {
+      await interaction.editReply({
+        content: `You already have an open deposit ticket: <#${existing.id}>`,
+      });
+      return;
+    }
+
+    // Find a "Tickets" category if one exists
+    const category = guild.channels.cache.find(
+      (c) => c.type === ChannelType.GuildCategory && c.name.toLowerCase() === "tickets"
+    );
+
+    // Create the private ticket channel
+    const ticketChannel = await guild.channels.create({
+      name: ticketName,
+      type: ChannelType.GuildText,
+      parent: category?.id ?? null,
+      permissionOverwrites: [
+        { id: guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] },
+        {
+          id: user.id,
+          allow: [
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.SendMessages,
+            PermissionFlagsBits.ReadMessageHistory,
+          ],
+        },
+      ],
+      topic: `Deposit ticket for ${user.tag}`,
+    });
+
+    const ticketEmbed = new EmbedBuilder()
+      .setColor(0x57f287)
+      .setTitle("📬 Deposit Ticket")
+      .setDescription(
+        `Hello ${user}! 👋\n\nAn admin will assist you with your deposit shortly.\n\nPlease let us know **how much** you would like to deposit and we'll get it sorted.`
+      )
+      .setFooter({ text: "Click Close Ticket when you are done" })
+      .setTimestamp();
+
+    const closeRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId("close_ticket")
+        .setLabel("Close Ticket")
+        .setEmoji("🔒")
+        .setStyle(ButtonStyle.Danger)
+    );
+
+    await ticketChannel.send({
+      content: `${user}`,
+      embeds: [ticketEmbed],
+      components: [closeRow],
+    });
+
+    await interaction.editReply({
+      content: `✅ Your deposit ticket has been opened: <#${ticketChannel.id}>`,
+    });
+    return;
+  }
+
+  // ── Close ticket button ─────────────────────────────────────────────────
+  if (customId === "close_ticket") {
+    const channel = interaction.channel as TextChannel;
+    if (!channel?.name?.startsWith("deposit-")) {
+      await interaction.reply({ content: "This button can only be used in a deposit ticket.", ephemeral: true });
+      return;
+    }
+    await interaction.reply({ content: "🔒 Closing ticket in 5 seconds..." });
+    setTimeout(() => channel.delete("Ticket closed").catch(() => {}), 5_000);
+    return;
+  }
 
   // Giveaway entry buttons: giveaway_enter_<id>
   if (customId.startsWith("giveaway_enter_")) {
