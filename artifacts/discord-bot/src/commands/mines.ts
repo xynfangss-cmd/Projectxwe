@@ -195,7 +195,7 @@ export const data = new SlashCommandBuilder()
     opt.setName("bet").setDescription("Amount of gems to bet").setRequired(true).setMinValue(100)
   )
   .addIntegerOption((opt) =>
-    opt.setName("mines").setDescription("Number of mines (1–15, default 3)").setRequired(false).setMinValue(1).setMaxValue(15)
+    opt.setName("mines").setDescription("Number of mines (1–9, default 3)").setRequired(false).setMinValue(1).setMaxValue(9)
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
