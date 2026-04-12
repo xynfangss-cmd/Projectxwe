@@ -1,0 +1,128 @@
+import {
+  pgTable,
+  text,
+  bigint,
+  integer,
+  boolean,
+  timestamp,
+  serial,
+  real,
+  jsonb,
+} from "drizzle-orm/pg-core";
+
+export const discordUsers = pgTable("discord_users", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  guildId: text("guild_id").notNull(),
+  username: text("username").notNull().default(""),
+  credits: bigint("credits", { mode: "number" }).notNull().default(0),
+  gems: bigint("gems", { mode: "number" }).notNull().default(0),
+  xp: bigint("xp", { mode: "number" }).notNull().default(0),
+  level: integer("level").notNull().default(1),
+  rank: text("rank").notNull().default("Member"),
+  totalCreditsEarned: bigint("total_credits_earned", { mode: "number" }).notNull().default(0),
+  messageCount: bigint("message_count", { mode: "number" }).notNull().default(0),
+  lastMessageAt: timestamp("last_message_at"),
+  lastDailyAt: timestamp("last_daily_at"),
+  lastWeeklyAt: timestamp("last_weekly_at"),
+  lastWorkAt: timestamp("last_work_at"),
+  lastCrimeAt: timestamp("last_crime_at"),
+  dailyStreak: integer("daily_streak").notNull().default(0),
+  inventoryJson: jsonb("inventory_json").$type<Record<string, number>>().default({}),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const discordBankAccounts = pgTable("discord_bank_accounts", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  guildId: text("guild_id").notNull(),
+  balance: bigint("balance", { mode: "number" }).notNull().default(0),
+  totalDeposited: bigint("total_deposited", { mode: "number" }).notNull().default(0),
+  totalWithdrawn: bigint("total_withdrawn", { mode: "number" }).notNull().default(0),
+  totalInterestEarned: bigint("total_interest_earned", { mode: "number" }).notNull().default(0),
+  lastInterestAt: timestamp("last_interest_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const discordGuildSettings = pgTable("discord_guild_settings", {
+  id: serial("id").primaryKey(),
+  guildId: text("guild_id").notNull().unique(),
+  creditsChannelId: text("credits_channel_id"),
+  chestChannelId: text("chest_channel_id"),
+  welcomeChannelId: text("welcome_channel_id"),
+  levelUpChannelId: text("level_up_channel_id"),
+  giveawayChannelId: text("giveaway_channel_id"),
+  loggingChannelId: text("logging_channel_id"),
+  xpMultiplier: real("xp_multiplier").notNull().default(1.0),
+  creditsMultiplier: real("credits_multiplier").notNull().default(1.0),
+  noXpRoles: text("no_xp_roles").array().default([]),
+  noXpChannels: text("no_xp_channels").array().default([]),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const discordChestHistory = pgTable("discord_chest_history", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  guildId: text("guild_id").notNull(),
+  rewardType: text("reward_type").notNull(),
+  rewardAmount: bigint("reward_amount", { mode: "number" }).notNull().default(0),
+  costXp: integer("cost_xp").notNull().default(750),
+  openedAt: timestamp("opened_at").notNull().defaultNow(),
+});
+
+export const discordGiveaways = pgTable("discord_giveaways", {
+  id: serial("id").primaryKey(),
+  guildId: text("guild_id").notNull(),
+  channelId: text("channel_id").notNull(),
+  messageId: text("message_id"),
+  prize: text("prize").notNull(),
+  description: text("description"),
+  winnerCount: integer("winner_count").notNull().default(1),
+  entryCost: bigint("entry_cost", { mode: "number" }).notNull().default(0),
+  entrantsJson: jsonb("entrants_json").$type<string[]>().default([]),
+  winnersJson: jsonb("winners_json").$type<string[]>().default([]),
+  hostedBy: text("hosted_by").notNull(),
+  endsAt: timestamp("ends_at").notNull(),
+  endedAt: timestamp("ended_at"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const discordShopItems = pgTable("discord_shop_items", {
+  id: serial("id").primaryKey(),
+  guildId: text("guild_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  price: bigint("price", { mode: "number" }).notNull(),
+  currency: text("currency").notNull().default("credits"),
+  roleId: text("role_id"),
+  emoji: text("emoji").notNull().default("🎁"),
+  stock: integer("stock").notNull().default(-1),
+  soldCount: integer("sold_count").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const discordTransactions = pgTable("discord_transactions", {
+  id: serial("id").primaryKey(),
+  guildId: text("guild_id").notNull(),
+  fromUserId: text("from_user_id"),
+  toUserId: text("to_user_id").notNull(),
+  amount: bigint("amount", { mode: "number" }).notNull(),
+  currency: text("currency").notNull().default("credits"),
+  type: text("type").notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const discordRoleRewards = pgTable("discord_role_rewards", {
+  id: serial("id").primaryKey(),
+  guildId: text("guild_id").notNull(),
+  roleId: text("role_id").notNull(),
+  requiredCredits: bigint("required_credits", { mode: "number" }).notNull().default(0),
+  requiredLevel: integer("required_level").notNull().default(1),
+  rankName: text("rank_name"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
