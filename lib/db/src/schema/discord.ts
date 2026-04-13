@@ -119,6 +119,24 @@ export const discordTransactions = pgTable("discord_transactions", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const discordDuels = pgTable("discord_duels", {
+  id: serial("id").primaryKey(),
+  gameId: text("game_id").notNull().unique(),
+  guildId: text("guild_id").notNull(),
+  channelId: text("channel_id").notNull(),
+  challengerId: text("challenger_id").notNull(),
+  opponentId: text("opponent_id").notNull(),
+  challengerUsername: text("challenger_username").notNull().default(""),
+  opponentUsername: text("opponent_username").notNull().default(""),
+  bet: bigint("bet", { mode: "number" }).notNull(),
+  deck: jsonb("deck").$type<string[]>().notNull().default([]),
+  challengerHand: jsonb("challenger_hand").$type<string[]>().notNull().default([]),
+  opponentHand: jsonb("opponent_hand").$type<string[]>().notNull().default([]),
+  status: text("status").notNull().default("pending"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const discordCodes = pgTable("discord_codes", {
   id: serial("id").primaryKey(),
   guildId: text("guild_id").notNull(),

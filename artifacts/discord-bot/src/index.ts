@@ -167,6 +167,9 @@ client.on(Events.MessageCreate, async (message) => {
 });
 
 client.on(Events.InteractionCreate, async (interaction: Interaction) => {
+  // Drop stale interactions replayed after a bot restart (already past Discord's 3s window)
+  if ("createdTimestamp" in interaction && Date.now() - (interaction as any).createdTimestamp > 2500) return;
+
   // Handle slash commands
   if (interaction.isChatInputCommand()) {
     const command = commands.get(interaction.commandName);

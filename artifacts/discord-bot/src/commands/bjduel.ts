@@ -8,6 +8,9 @@ import {
   ButtonInteraction,
   MessageFlags,
 } from "discord.js";
+import { db } from "@workspace/db";
+import { discordDuels } from "@workspace/db/schema";
+import { eq } from "drizzle-orm";
 import { getOrCreateUser, updateUser } from "../utils/db.js";
 import { formatNumber } from "../utils/constants.js";
 
@@ -15,6 +18,7 @@ import { formatNumber } from "../utils/constants.js";
 type DuelStatus = "pending" | "challenger_turn" | "opponent_turn" | "done";
 
 interface DuelGame {
+  gameId: string;
   guildId: string;
   channelId: string;
   challengerId: string;
@@ -26,9 +30,68 @@ interface DuelGame {
   challengerHand: string[];
   opponentHand: string[];
   status: DuelStatus;
+  expiresAt: Date;
 }
 
-export const duels = new Map<string, DuelGame>();
+// ── DB helpers ────────────────────────────────────────────────────────────────
+async function saveGame(game: DuelGame): Promise<void> {
+  await db
+    .insert(discordDuels)
+    .values({
+      gameId:             game.gameId,
+      guildId:            game.guildId,
+      channelId:          game.channelId,
+      challengerId:       game.challengerId,
+      opponentId:         game.opponentId,
+      challengerUsername: game.challengerUsername,
+      opponentUsername:   game.opponentUsername,
+      bet:                game.bet,
+      deck:               game.deck,
+      challengerHand:     game.challengerHand,
+      opponentHand:       game.opponentHand,
+      status:             game.status,
+      expiresAt:          game.expiresAt,
+    })
+    .onConflictDoUpdate({
+      target: discordDuels.gameId,
+      set: {
+        deck:           game.deck,
+        challengerHand: game.challengerHand,
+        opponentHand:   game.opponentHand,
+        status:         game.status,
+      },
+    });
+}
+
+async function loadGame(gameId: string): Promise<DuelGame | null> {
+  const [row] = await db
+    .select()
+    .from(discordDuels)
+    .where(eq(discordDuels.gameId, gameId))
+    .limit(1);
+
+  if (!row) return null;
+
+  return {
+    gameId:             row.gameId,
+    guildId:            row.guildId,
+    channelId:          row.channelId,
+    challengerId:       row.challengerId,
+    opponentId:         row.opponentId,
+    challengerUsername: row.challengerUsername,
+    opponentUsername:   row.opponentUsername,
+    bet:                row.bet,
+    deck:               row.deck as string[],
+    challengerHand:     row.challengerHand as string[],
+    opponentHand:       row.opponentHand as string[],
+    status:             row.status as DuelStatus,
+    expiresAt:          row.expiresAt,
+  };
+}
+
+async function deleteGame(gameId: string): Promise<void> {
+  await db.delete(discordDuels).where(eq(discordDuels.gameId, gameId));
+}
 
 // ── Deck helpers ─────────────────────────────────────────────────────────────
 const SUITS  = ["♠", "♥", "♦", "♣"];
@@ -86,25 +149,21 @@ function newGameId(): string {
 }
 
 // ── Parse customId safely ─────────────────────────────────────────────────────
-// Format: bjduel_{action}_{gameId}
 function parseCustomId(customId: string): { action: string; gameId: string } {
-  const without = customId.slice("bjduel_".length); // e.g. "accept_abc123"
+  const without = customId.slice("bjduel_".length);
   const idx = without.indexOf("_");
-  return {
-    action: without.slice(0, idx),
-    gameId: without.slice(idx + 1),
-  };
+  return { action: without.slice(0, idx), gameId: without.slice(idx + 1) };
 }
 
-// ── Embed builders ───────────────────────────────────────────────────────────
-function pendingEmbed(challenger: string, opponent: string, bet: number): EmbedBuilder {
+// ── Embeds ────────────────────────────────────────────────────────────────────
+function pendingEmbed(game: DuelGame): EmbedBuilder {
   return new EmbedBuilder()
     .setColor(0x5865f2)
     .setTitle("🃏 Blackjack Duel Challenge!")
     .setDescription(
-      `<@${challenger}> has challenged <@${opponent}> to a **Blackjack Duel**!\n\n` +
-      `💎 **Wager:** ${formatNumber(bet)} gems each — winner takes **${formatNumber(bet * 2)}**!\n\n` +
-      `<@${opponent}>, do you accept?`
+      `<@${game.challengerId}> has challenged <@${game.opponentId}> to a **Blackjack Duel**!\n\n` +
+      `💎 **Wager:** ${formatNumber(game.bet)} gems each — winner takes **${formatNumber(game.bet * 2)}**!\n\n` +
+      `<@${game.opponentId}>, do you accept?`
     )
     .setFooter({ text: "Challenge expires in 2 minutes" })
     .setTimestamp();
@@ -114,12 +173,9 @@ function gameEmbed(game: DuelGame, title: string, color: number): EmbedBuilder {
   const turn =
     game.status === "challenger_turn"
       ? `🎯 It's **${game.challengerUsername}'s** turn!`
-      : game.status === "opponent_turn"
-      ? `🎯 It's **${game.opponentUsername}'s** turn!`
-      : "";
+      : `🎯 It's **${game.opponentUsername}'s** turn!`;
 
-  // Hide opponent's second card while it's still challenger's turn
-  const opponentHandDisplay =
+  const opponentDisplay =
     game.status === "challenger_turn"
       ? `${game.opponentHand[0]}  🂠  **(?)** `
       : handStr(game.opponentHand);
@@ -127,10 +183,10 @@ function gameEmbed(game: DuelGame, title: string, color: number): EmbedBuilder {
   return new EmbedBuilder()
     .setColor(color)
     .setTitle(title)
-    .setDescription(turn || null)
+    .setDescription(turn)
     .addFields(
       { name: `🃏 ${game.challengerUsername}'s Hand`, value: handStr(game.challengerHand), inline: false },
-      { name: `🃏 ${game.opponentUsername}'s Hand`,   value: opponentHandDisplay,           inline: false },
+      { name: `🃏 ${game.opponentUsername}'s Hand`,   value: opponentDisplay,              inline: false },
       { name: "💎 Wager",      value: `${formatNumber(game.bet)} gems each`, inline: true },
       { name: "🏆 Prize Pool", value: `${formatNumber(game.bet * 2)} gems`,  inline: true },
     )
@@ -141,14 +197,12 @@ function resultEmbed(game: DuelGame, winnerId: string | null): EmbedBuilder {
   const cTotal = handTotal(game.challengerHand);
   const oTotal = handTotal(game.opponentHand);
 
-  let description: string;
-  if (winnerId === null) {
-    description = `It's a **tie**! Both players keep their gems.`;
-  } else if (winnerId === game.challengerId) {
-    description = `🏆 **${game.challengerUsername}** wins **${formatNumber(game.bet * 2)} gems**!`;
-  } else {
-    description = `🏆 **${game.opponentUsername}** wins **${formatNumber(game.bet * 2)} gems**!`;
-  }
+  const description =
+    winnerId === null
+      ? `It's a **tie**! Both players keep their gems.`
+      : winnerId === game.challengerId
+      ? `🏆 **${game.challengerUsername}** wins **${formatNumber(game.bet * 2)} gems**!`
+      : `🏆 **${game.opponentUsername}** wins **${formatNumber(game.bet * 2)} gems**!`;
 
   return new EmbedBuilder()
     .setColor(winnerId === null ? 0xfee75c : 0x57f287)
@@ -165,8 +219,8 @@ function resultEmbed(game: DuelGame, winnerId: string | null): EmbedBuilder {
         value: `${handStr(game.opponentHand)}${oTotal > 21 ? "  💥 Bust" : ""}`,
         inline: false,
       },
-      { name: "💎 Wager",    value: `${formatNumber(game.bet)} each`,        inline: true },
-      { name: "🏆 Total Pot", value: `${formatNumber(game.bet * 2)}`,        inline: true },
+      { name: "💎 Wager",     value: `${formatNumber(game.bet)} each`,  inline: true },
+      { name: "🏆 Total Pot", value: `${formatNumber(game.bet * 2)}`,   inline: true },
     )
     .setTimestamp();
 }
@@ -186,23 +240,19 @@ function playRow(gameId: string): ActionRowBuilder<ButtonBuilder> {
   );
 }
 
-// ── Resolve game & pay out ────────────────────────────────────────────────────
-async function resolveGame(game: DuelGame, gameId: string): Promise<string | null> {
+// ── Resolve & pay out ─────────────────────────────────────────────────────────
+async function resolveGame(game: DuelGame): Promise<string | null> {
   const cTotal = handTotal(game.challengerHand);
   const oTotal = handTotal(game.opponentHand);
 
-  const cBust = cTotal > 21;
-  const oBust = oTotal > 21;
-
   let winnerId: string | null = null;
-  if      (cBust && oBust)       winnerId = null;
-  else if (cBust)                winnerId = game.opponentId;
-  else if (oBust)                winnerId = game.challengerId;
-  else if (cTotal > oTotal)      winnerId = game.challengerId;
-  else if (oTotal > cTotal)      winnerId = game.opponentId;
-  else                           winnerId = null; // tie
+  if      (cTotal > 21 && oTotal > 21) winnerId = null;
+  else if (cTotal > 21)                winnerId = game.opponentId;
+  else if (oTotal > 21)                winnerId = game.challengerId;
+  else if (cTotal > oTotal)            winnerId = game.challengerId;
+  else if (oTotal > cTotal)            winnerId = game.opponentId;
+  else                                 winnerId = null;
 
-  // Both bets already deducted. Winner gets pot; tie refunds both.
   const [cUser, oUser] = await Promise.all([
     getOrCreateUser(game.challengerId, game.guildId, game.challengerUsername),
     getOrCreateUser(game.opponentId,   game.guildId, game.opponentUsername),
@@ -213,14 +263,13 @@ async function resolveGame(game: DuelGame, gameId: string): Promise<string | nul
   } else if (winnerId === game.opponentId) {
     await updateUser(game.opponentId, game.guildId, { credits: oUser.credits + game.bet * 2 });
   } else {
-    // tie — refund both
     await Promise.all([
       updateUser(game.challengerId, game.guildId, { credits: cUser.credits + game.bet }),
       updateUser(game.opponentId,   game.guildId, { credits: oUser.credits + game.bet }),
     ]);
   }
 
-  duels.delete(gameId);
+  await deleteGame(game.gameId);
   return winnerId;
 }
 
@@ -236,7 +285,6 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  // Acknowledge immediately to avoid Discord's 3-second timeout
   await interaction.deferReply();
 
   const opponent   = interaction.options.getUser("opponent", true);
@@ -261,19 +309,20 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  // Hold challenger's bet
+  // Hold challenger's bet immediately
   await updateUser(challenger.id, guildId, { credits: cUser.credits - bet });
 
-  const gameId = newGameId();
-  const seed   = Date.now() ^ Math.floor(Math.random() * 0xffffffff);
-  const deck   = shuffleDeck(seed);
-
-  const cHand = [deck.shift()!, deck.shift()!];
-  const oHand = [deck.shift()!, deck.shift()!];
+  const gameId    = newGameId();
+  const seed      = Date.now() ^ Math.floor(Math.random() * 0xffffffff);
+  const deck      = shuffleDeck(seed);
+  const cHand     = [deck.shift()!, deck.shift()!];
+  const oHand     = [deck.shift()!, deck.shift()!];
+  const expiresAt = new Date(Date.now() + 2 * 60 * 1000);
 
   const game: DuelGame = {
+    gameId,
     guildId,
-    channelId: interaction.channelId,
+    channelId:          interaction.channelId,
     challengerId:       challenger.id,
     opponentId:         opponent.id,
     challengerUsername: challenger.username,
@@ -283,21 +332,24 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     challengerHand: cHand,
     opponentHand:   oHand,
     status: "pending",
+    expiresAt,
   };
-  duels.set(gameId, game);
+
+  // Persist to DB so it survives bot restarts
+  await saveGame(game);
 
   await interaction.editReply({
     content: `<@${opponent.id}>`,
-    embeds: [pendingEmbed(challenger.id, opponent.id, bet)],
+    embeds: [pendingEmbed(game)],
     components: [pendingRow(gameId)],
   });
 
   // Auto-expire after 2 minutes
   setTimeout(async () => {
-    const g = duels.get(gameId);
-    if (!g || g.status !== "pending") return;
-    duels.delete(gameId);
+    const current = await loadGame(gameId);
+    if (!current || current.status !== "pending") return;
 
+    await deleteGame(gameId);
     const fresh = await getOrCreateUser(challenger.id, guildId, challenger.username);
     await updateUser(challenger.id, guildId, { credits: fresh.credits + bet });
 
@@ -321,12 +373,23 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 // ── Button handler ────────────────────────────────────────────────────────────
 export async function handleDuelButton(interaction: ButtonInteraction): Promise<void> {
   const { action, gameId } = parseCustomId(interaction.customId);
-  const game = duels.get(gameId);
 
-  // ── Accept ──────────────────────────────────────────────────────────────────
+  // ── Accept ───────────────────────────────────────────────────────────────────
   if (action === "accept") {
+    // Fast checks before any DB work
+    const game = await loadGame(gameId);
+
     if (!game) {
       await interaction.reply({ content: "❌ This duel has expired or no longer exists.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+    if (Date.now() > game.expiresAt.getTime()) {
+      await deleteGame(gameId);
+      await interaction.reply({ content: "❌ This duel has expired.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+    if (game.status !== "pending") {
+      await interaction.reply({ content: "❌ This duel is already in progress.", flags: MessageFlags.Ephemeral });
       return;
     }
     if (interaction.user.id !== game.opponentId) {
@@ -334,7 +397,6 @@ export async function handleDuelButton(interaction: ButtonInteraction): Promise<
       return;
     }
 
-    // Acknowledge first, THEN do DB work
     await interaction.deferUpdate();
 
     const oUser = await getOrCreateUser(game.opponentId, game.guildId, game.opponentUsername);
@@ -342,7 +404,7 @@ export async function handleDuelButton(interaction: ButtonInteraction): Promise<
       // Refund challenger and cancel
       const cUser = await getOrCreateUser(game.challengerId, game.guildId, game.challengerUsername);
       await updateUser(game.challengerId, game.guildId, { credits: cUser.credits + game.bet });
-      duels.delete(gameId);
+      await deleteGame(gameId);
 
       await interaction.editReply({
         content: "",
@@ -350,7 +412,7 @@ export async function handleDuelButton(interaction: ButtonInteraction): Promise<
           new EmbedBuilder()
             .setColor(0xed4245)
             .setTitle("❌ Duel Cancelled")
-            .setDescription(`<@${game.opponentId}> doesn't have enough gems to match the wager. Duel cancelled and gems refunded.`)
+            .setDescription(`<@${game.opponentId}> doesn't have enough gems to match the wager. <@${game.challengerId}>'s gems have been refunded.`)
             .setTimestamp(),
         ],
         components: [],
@@ -358,9 +420,9 @@ export async function handleDuelButton(interaction: ButtonInteraction): Promise<
       return;
     }
 
-    // Deduct opponent bet and start game
     await updateUser(game.opponentId, game.guildId, { credits: oUser.credits - game.bet });
     game.status = "challenger_turn";
+    await saveGame(game);
 
     await interaction.editReply({
       content: `<@${game.challengerId}>`,
@@ -370,8 +432,10 @@ export async function handleDuelButton(interaction: ButtonInteraction): Promise<
     return;
   }
 
-  // ── Decline ─────────────────────────────────────────────────────────────────
+  // ── Decline ───────────────────────────────────────────────────────────────────
   if (action === "decline") {
+    const game = await loadGame(gameId);
+
     if (!game) {
       await interaction.reply({ content: "❌ This duel has already expired.", flags: MessageFlags.Ephemeral });
       return;
@@ -383,7 +447,7 @@ export async function handleDuelButton(interaction: ButtonInteraction): Promise<
 
     await interaction.deferUpdate();
 
-    duels.delete(gameId);
+    await deleteGame(gameId);
     const cUser = await getOrCreateUser(game.challengerId, game.guildId, game.challengerUsername);
     await updateUser(game.challengerId, game.guildId, { credits: cUser.credits + game.bet });
 
@@ -404,9 +468,11 @@ export async function handleDuelButton(interaction: ButtonInteraction): Promise<
     return;
   }
 
-  // ── Hit & Stand — check game exists first (quick, no DB) ──────────────────
-  if (!game) {
-    await interaction.reply({ content: "❌ This duel no longer exists.", flags: MessageFlags.Ephemeral });
+  // ── Hit / Stand — load game from DB ──────────────────────────────────────────
+  const game = await loadGame(gameId);
+
+  if (!game || game.status === "done") {
+    await interaction.reply({ content: "❌ This duel no longer exists or has already ended.", flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -417,8 +483,6 @@ export async function handleDuelButton(interaction: ButtonInteraction): Promise<
     await interaction.reply({ content: "❌ You are not part of this duel.", flags: MessageFlags.Ephemeral });
     return;
   }
-
-  // Validate it's actually this player's turn
   if (game.status === "challenger_turn" && !isChallenger) {
     await interaction.reply({ content: `❌ It's **${game.challengerUsername}'s** turn, not yours!`, flags: MessageFlags.Ephemeral });
     return;
@@ -428,10 +492,9 @@ export async function handleDuelButton(interaction: ButtonInteraction): Promise<
     return;
   }
 
-  // Acknowledge immediately before DB work
   await interaction.deferUpdate();
 
-  // ── Hit ───────────────────────────────────────────────────────────────────
+  // ── Hit ───────────────────────────────────────────────────────────────────────
   if (action === "hit") {
     const card = game.deck.shift()!;
 
@@ -440,33 +503,32 @@ export async function handleDuelButton(interaction: ButtonInteraction): Promise<
       const total = handTotal(game.challengerHand);
 
       if (total >= 21) {
-        // Bust or 21 — auto-advance to opponent's turn
         game.status = "opponent_turn";
+        await saveGame(game);
         await interaction.editReply({
           content: `<@${game.opponentId}>`,
           embeds: [gameEmbed(game, "🃏 Blackjack Duel — In Progress", 0x5865f2)],
           components: [playRow(gameId)],
         });
       } else {
+        await saveGame(game);
         await interaction.editReply({
           content: `<@${game.challengerId}>`,
           embeds: [gameEmbed(game, "🃏 Blackjack Duel — In Progress", 0x5865f2)],
           components: [playRow(gameId)],
         });
       }
-    } else if (game.status === "opponent_turn") {
+    } else {
       game.opponentHand.push(card);
       const total = handTotal(game.opponentHand);
 
       if (total >= 21) {
         game.status = "done";
-        const winnerId = await resolveGame(game, gameId);
-        await interaction.editReply({
-          content: "",
-          embeds: [resultEmbed(game, winnerId)],
-          components: [],
-        });
+        await saveGame(game);
+        const winnerId = await resolveGame(game);
+        await interaction.editReply({ content: "", embeds: [resultEmbed(game, winnerId)], components: [] });
       } else {
+        await saveGame(game);
         await interaction.editReply({
           content: `<@${game.opponentId}>`,
           embeds: [gameEmbed(game, "🃏 Blackjack Duel — In Progress", 0x5865f2)],
@@ -477,23 +539,21 @@ export async function handleDuelButton(interaction: ButtonInteraction): Promise<
     return;
   }
 
-  // ── Stand ──────────────────────────────────────────────────────────────────
+  // ── Stand ─────────────────────────────────────────────────────────────────────
   if (action === "stand") {
     if (game.status === "challenger_turn") {
       game.status = "opponent_turn";
+      await saveGame(game);
       await interaction.editReply({
         content: `<@${game.opponentId}>`,
         embeds: [gameEmbed(game, "🃏 Blackjack Duel — In Progress", 0x5865f2)],
         components: [playRow(gameId)],
       });
-    } else if (game.status === "opponent_turn") {
+    } else {
       game.status = "done";
-      const winnerId = await resolveGame(game, gameId);
-      await interaction.editReply({
-        content: "",
-        embeds: [resultEmbed(game, winnerId)],
-        components: [],
-      });
+      await saveGame(game);
+      const winnerId = await resolveGame(game);
+      await interaction.editReply({ content: "", embeds: [resultEmbed(game, winnerId)], components: [] });
     }
     return;
   }
