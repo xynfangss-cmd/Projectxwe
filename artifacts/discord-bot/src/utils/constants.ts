@@ -22,13 +22,13 @@ export const WORK_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 export const CRIME_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 export const CHEST_REWARDS = [
-  { type: "Credit Boost",       weight: 30, minCredits: 1_000,   maxCredits: 5_000,   xp: 0,   emoji: "💰" },
-  { type: "Credit Fortune",     weight: 25, minCredits: 5_000,   maxCredits: 15_000,  xp: 0,   emoji: "💵" },
-  { type: "Credit Treasure",    weight: 20, minCredits: 15_000,  maxCredits: 30_000,  xp: 0,   emoji: "💎" },
-  { type: "Credit Jackpot",     weight: 12, minCredits: 30_000,  maxCredits: 50_000,  xp: 0,   emoji: "🎰" },
-  { type: "Credit Mega Jackpot",weight: 5,  minCredits: 50_000,  maxCredits: 100_000, xp: 0,   emoji: "🏆" },
-  { type: "XP Boost",           weight: 5,  minCredits: 0,       maxCredits: 0,       xp: 200, emoji: "⭐" },
-  { type: "XP Super Boost",     weight: 3,  minCredits: 0,       maxCredits: 0,       xp: 500, emoji: "🌟" },
+  { type: "Credit Boost",       weight: 30, minCredits: 1_000_000,    maxCredits: 5_000_000,    xp: 0,   emoji: "💰" },
+  { type: "Credit Fortune",     weight: 25, minCredits: 5_000_000,    maxCredits: 15_000_000,   xp: 0,   emoji: "💵" },
+  { type: "Credit Treasure",    weight: 20, minCredits: 15_000_000,   maxCredits: 30_000_000,   xp: 0,   emoji: "💎" },
+  { type: "Credit Jackpot",     weight: 12, minCredits: 30_000_000,   maxCredits: 50_000_000,   xp: 0,   emoji: "🎰" },
+  { type: "Credit Mega Jackpot",weight: 5,  minCredits: 50_000_000,   maxCredits: 100_000_000,  xp: 0,   emoji: "🏆" },
+  { type: "XP Boost",           weight: 5,  minCredits: 0,            maxCredits: 0,            xp: 200, emoji: "⭐" },
+  { type: "XP Super Boost",     weight: 3,  minCredits: 0,            maxCredits: 0,            xp: 500, emoji: "🌟" },
 ] as const;
 
 export const WORK_JOBS = [
