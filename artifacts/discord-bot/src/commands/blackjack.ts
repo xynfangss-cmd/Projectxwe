@@ -11,9 +11,9 @@ import {
 import { getOrCreateUser, updateUser } from "../utils/db.js";
 import { formatNumber } from "../utils/constants.js";
 
-// ── Card helpers ─────────────────────────────────────────────────────────────
+// ── Card helpers ──────────────────────────────────────────────────────────────
 // Card index 0-51: suitIndex*13 + faceIndex
-// Faces: 0=2, 1=3, ..., 8=10, 9=J, 10=Q, 11=K, 12=A
+// Faces: 0=2 … 8=10, 9=J, 10=Q, 11=K, 12=A
 // Suits: 0=♠, 1=♥, 2=♦, 3=♣
 const SUITS = ["♠", "♥", "♦", "♣"];
 const FACES = ["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
@@ -21,8 +21,8 @@ const FACES = ["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
 function cardValue(idx: number): number {
   const fi = idx % 13;
   if (fi === 12) return 11; // Ace
-  if (fi >= 9) return 10;   // J, Q, K
-  return fi + 2;            // 2-10
+  if (fi >= 9)  return 10;  // J, Q, K
+  return fi + 2;            // 2–10
 }
 
 function cardDisplay(idx: number): string {
@@ -40,27 +40,62 @@ function displayHand(cards: number[], hideSecond = false): string {
   return cards.map((c, i) => (hideSecond && i === 1 ? "`🂠`" : cardDisplay(c))).join(" ");
 }
 
-function randomCard(): number {
-  return Math.floor(Math.random() * 52);
+// ── Seeded PRNG (mulberry32) ──────────────────────────────────────────────────
+// Deterministic, fast, good distribution — lets us reproduce a full shuffled
+// deck from a single seed number, keeping the stateless customId design while
+// guaranteeing no duplicate cards within a game.
+function makePRNG(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
-function randomCards(n: number): number[] {
-  const arr: number[] = [];
-  for (let i = 0; i < n; i++) arr.push(randomCard());
-  return arr;
+// Fisher-Yates shuffle of a 52-card deck using the seeded PRNG
+function shuffledDeck(seed: number): number[] {
+  const prng = makePRNG(seed);
+  const deck = Array.from({ length: 52 }, (_, i) => i);
+  for (let i = 51; i > 0; i--) {
+    const j = Math.floor(prng() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck;
+}
+
+// Deal the next card from the deck that hasn't been used yet
+function nextCard(seed: number, usedCards: number[]): number {
+  const deck = shuffledDeck(seed);
+  const usedSet = new Set(usedCards);
+  for (const card of deck) {
+    if (!usedSet.has(card)) return card;
+  }
+  // Extremely unlikely fallback — start a fresh deck mid-game
+  return deck[usedCards.length % 52];
+}
+
+function newSeed(): number {
+  return Math.floor(Math.random() * 2 ** 30);
 }
 
 // ── CustomId encoding ─────────────────────────────────────────────────────────
-// bj_h_{ownerId}_{pCards}_{dCards}_{bet}  ← Hit button
-// bj_s_{ownerId}_{pCards}_{dCards}_{bet}  ← Stand button
-// bj_d_{ownerId}_{pCards}_{dCards}_{bet}  ← Double Down button
-// Cards encoded as dot-separated indices (0-51)
+// bj_{action}_{ownerId}_{pCards}_{dCards}_{bet}_{seed}
+// Cards = dot-separated indices; seed = integer
 
 function encodeCards(cards: number[]): string { return cards.join("."); }
 function decodeCards(s: string): number[] { return s.split(".").map(Number); }
 
-function bjId(action: "h" | "s" | "d", ownerId: string, pCards: number[], dCards: number[], bet: number) {
-  return `bj_${action}_${ownerId}_${encodeCards(pCards)}_${encodeCards(dCards)}_${bet}`;
+function bjId(
+  action: "h" | "s" | "d",
+  ownerId: string,
+  pCards: number[],
+  dCards: number[],
+  bet: number,
+  seed: number
+) {
+  return `bj_${action}_${ownerId}_${encodeCards(pCards)}_${encodeCards(dCards)}_${bet}_${seed}`;
 }
 
 interface BJState {
@@ -69,27 +104,44 @@ interface BJState {
   pCards: number[];
   dCards: number[];
   bet: number;
+  seed: number;
 }
 
 function parseBJId(customId: string): BJState | null {
   try {
-    // bj_{action}_{ownerId}_{pCards}_{dCards}_{bet}
-    const prefix = customId.match(/^bj_([hsd])_(\d+)_([0-9.]+)_([0-9.]+)_(\d+)$/);
-    if (!prefix) return null;
+    const m = customId.match(/^bj_([hsd])_(\d+)_([0-9.]+)_([0-9.]+)_(\d+)_(\d+)$/);
+    if (!m) return null;
     return {
-      action: prefix[1] as "h" | "s" | "d",
-      ownerId: prefix[2],
-      pCards: decodeCards(prefix[3]),
-      dCards: decodeCards(prefix[4]),
-      bet: parseInt(prefix[5]),
+      action: m[1] as "h" | "s" | "d",
+      ownerId: m[2],
+      pCards: decodeCards(m[3]),
+      dCards: decodeCards(m[4]),
+      bet: parseInt(m[5]),
+      seed: parseInt(m[6]),
     };
   } catch { return null; }
 }
 
-// ── Build embed ───────────────────────────────────────────────────────────────
+// ── Dealer logic ──────────────────────────────────────────────────────────────
+// Dealer hits on soft 16 and below, stands on soft 17+ (standard casino rules)
+function dealerPlay(dCards: number[], seed: number): number[] {
+  const hand = [...dCards];
+  while (handValue(hand) < 17) {
+    hand.push(nextCard(seed, hand));
+  }
+  return hand;
+}
+
+// ── Embed builder ─────────────────────────────────────────────────────────────
 type BJResult = "blackjack" | "win" | "lose" | "push" | "bust";
 
-function buildEmbed(pCards: number[], dCards: number[], bet: number, hiding = true, result?: BJResult): EmbedBuilder {
+function buildEmbed(
+  pCards: number[],
+  dCards: number[],
+  bet: number,
+  hiding = true,
+  result?: BJResult
+): EmbedBuilder {
   const pTotal = handValue(pCards);
   const dTotal = handValue(dCards);
 
@@ -98,10 +150,10 @@ function buildEmbed(pCards: number[], dCards: number[], bet: number, hiding = tr
   };
   const titleMap: Record<BJResult, string> = {
     blackjack: "🃏 Blackjack — BLACKJACK! 🎉",
-    win: "🃏 Blackjack — You Win!",
-    push: "🃏 Blackjack — Push (Tie)",
-    lose: "🃏 Blackjack — Dealer Wins",
-    bust: "🃏 Blackjack — Busted! 💥",
+    win:       "🃏 Blackjack — You Win! 🎉",
+    push:      "🃏 Blackjack — Push (Tie)",
+    lose:      "🃏 Blackjack — Dealer Wins",
+    bust:      "🃏 Blackjack — Busted! 💥",
   };
 
   const color = result ? colorMap[result] : 0x5865f2;
@@ -112,7 +164,11 @@ function buildEmbed(pCards: number[], dCards: number[], bet: number, hiding = tr
     .setTitle(title)
     .addFields(
       { name: `Your Hand — ${pTotal}`, value: displayHand(pCards), inline: false },
-      { name: hiding ? "Dealer Hand — ?" : `Dealer Hand — ${dTotal}`, value: displayHand(dCards, hiding), inline: false },
+      {
+        name: hiding ? "Dealer Hand — ?" : `Dealer Hand — ${dTotal}`,
+        value: displayHand(dCards, hiding),
+        inline: false,
+      }
     )
     .setFooter({ text: `Bet: ${formatNumber(bet)} gems` })
     .setTimestamp();
@@ -120,7 +176,7 @@ function buildEmbed(pCards: number[], dCards: number[], bet: number, hiding = tr
   if (result) {
     let net = 0;
     if (result === "blackjack") net = Math.floor(bet * 1.5);
-    else if (result === "win") net = bet;
+    else if (result === "win")  net = bet;
     else if (result === "push") net = 0;
     else net = -bet;
 
@@ -134,35 +190,41 @@ function buildEmbed(pCards: number[], dCards: number[], bet: number, hiding = tr
   return embed;
 }
 
-// ── Build action buttons ──────────────────────────────────────────────────────
-function buildButtons(ownerId: string, pCards: number[], dCards: number[], bet: number, disabled = false) {
+// ── Buttons ───────────────────────────────────────────────────────────────────
+function buildButtons(
+  ownerId: string,
+  pCards: number[],
+  dCards: number[],
+  bet: number,
+  seed: number,
+  disabled = false
+) {
   const canDouble = pCards.length === 2 && !disabled;
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(bjId("h", ownerId, pCards, dCards, bet))
+      .setCustomId(bjId("h", ownerId, pCards, dCards, bet, seed))
       .setLabel("Hit").setEmoji("➕").setStyle(ButtonStyle.Primary).setDisabled(disabled),
     new ButtonBuilder()
-      .setCustomId(bjId("s", ownerId, pCards, dCards, bet))
+      .setCustomId(bjId("s", ownerId, pCards, dCards, bet, seed))
       .setLabel("Stand").setEmoji("✋").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
     new ButtonBuilder()
-      .setCustomId(bjId("d", ownerId, pCards, dCards, bet))
+      .setCustomId(bjId("d", ownerId, pCards, dCards, bet, seed))
       .setLabel("Double Down").setEmoji("💰").setStyle(ButtonStyle.Success).setDisabled(!canDouble),
   );
 }
 
-// ── Dealer logic ──────────────────────────────────────────────────────────────
-function dealerPlay(dCards: number[]): number[] {
-  const hand = [...dCards];
-  while (handValue(hand) < 17) hand.push(randomCard());
-  return hand;
-}
-
-// ── Finish game and apply payout ──────────────────────────────────────────────
-async function applyPayout(ownerId: string, guildId: string, bet: number, result: BJResult): Promise<void> {
+// ── Payout ────────────────────────────────────────────────────────────────────
+async function applyPayout(
+  ownerId: string,
+  guildId: string,
+  bet: number,
+  result: BJResult
+): Promise<void> {
   let payout = 0;
-  if (result === "blackjack") payout = bet + Math.floor(bet * 1.5);
-  else if (result === "win") payout = bet * 2;
-  else if (result === "push") payout = bet;
+  if (result === "blackjack") payout = bet + Math.floor(bet * 1.5); // 3:2
+  else if (result === "win")  payout = bet * 2;                      // 1:1
+  else if (result === "push") payout = bet;                          // return
+  // bust/lose: payout = 0 (already deducted)
   if (payout > 0) {
     const dbUser = await getOrCreateUser(ownerId, guildId, "");
     await updateUser(ownerId, guildId, { credits: dbUser.credits + payout });
@@ -172,15 +234,15 @@ async function applyPayout(ownerId: string, guildId: string, bet: number, result
 // ── /blackjack command ────────────────────────────────────────────────────────
 export const data = new SlashCommandBuilder()
   .setName("blackjack")
-  .setDescription("Play interactive blackjack — Hit, Stand, or Double Down!")
+  .setDescription("Play blackjack with a real shuffled deck — Hit, Stand, or Double Down!")
   .addIntegerOption((opt) =>
     opt.setName("bet").setDescription("Amount of gems to bet").setRequired(true).setMinValue(100)
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  const userId = interaction.user.id;
+  const userId  = interaction.user.id;
   const guildId = interaction.guildId!;
-  const bet = interaction.options.getInteger("bet", true);
+  const bet     = interaction.options.getInteger("bet", true);
 
   const dbUser = await getOrCreateUser(userId, guildId, interaction.user.username);
   if (dbUser.credits < bet) {
@@ -193,23 +255,31 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   await updateUser(userId, guildId, { credits: dbUser.credits - bet });
 
-  const pCards = randomCards(2);
-  const dCards = randomCards(2);
-  const pTotal = handValue(pCards);
+  // Generate a fresh seeded deck for this game
+  const seed = newSeed();
+  const deck  = shuffledDeck(seed);
 
-  // Natural blackjack
+  // Deal: player gets deck[0], deck[2]; dealer gets deck[1], deck[3]
+  const pCards = [deck[0], deck[2]];
+  const dCards  = [deck[1], deck[3]];
+  const pTotal  = handValue(pCards);
+
+  // Natural blackjack (player 21 on first two cards)
   if (pTotal === 21) {
-    await applyPayout(userId, guildId, bet, "blackjack");
+    const dTotal = handValue(dCards);
+    // Check for push (both blackjack)
+    const result: BJResult = dTotal === 21 ? "push" : "blackjack";
+    await applyPayout(userId, guildId, bet, result);
     await interaction.reply({
-      embeds: [buildEmbed(pCards, dCards, bet, false, "blackjack")],
-      components: [buildButtons(userId, pCards, dCards, bet, true)],
+      embeds: [buildEmbed(pCards, dCards, bet, false, result)],
+      components: [buildButtons(userId, pCards, dCards, bet, seed, true)],
     });
     return;
   }
 
   await interaction.reply({
     embeds: [buildEmbed(pCards, dCards, bet)],
-    components: [buildButtons(userId, pCards, dCards, bet)],
+    components: [buildButtons(userId, pCards, dCards, bet, seed)],
   });
 }
 
@@ -223,49 +293,50 @@ export async function handleButton(interaction: ButtonInteraction): Promise<void
     return;
   }
 
-  // Acknowledge immediately
   await interaction.deferUpdate();
 
-  const { ownerId, pCards, dCards, bet } = state;
+  const { ownerId, pCards, dCards, bet, seed } = state;
   const guildId = interaction.guildId!;
+  const allDealt = [...pCards, ...dCards];
 
   // ── HIT ──────────────────────────────────────────────────────────────────
   if (state.action === "h") {
-    const newPCards = [...pCards, randomCard()];
-    const pTotal = handValue(newPCards);
+    const newCard   = nextCard(seed, allDealt);
+    const newPCards = [...pCards, newCard];
+    const pTotal    = handValue(newPCards);
 
     if (pTotal > 21) {
       await applyPayout(ownerId, guildId, bet, "bust");
       await interaction.editReply({
         embeds: [buildEmbed(newPCards, dCards, bet, false, "bust")],
-        components: [buildButtons(ownerId, newPCards, dCards, bet, true)],
+        components: [buildButtons(ownerId, newPCards, dCards, bet, seed, true)],
       });
       return;
     }
 
     if (pTotal === 21) {
       // Auto-stand at 21
-      const finalDealer = dealerPlay(dCards);
+      const finalDealer = dealerPlay(dCards, seed);
       const dTotal = handValue(finalDealer);
       const result: BJResult = dTotal > 21 || pTotal > dTotal ? "win" : pTotal < dTotal ? "lose" : "push";
       await applyPayout(ownerId, guildId, bet, result);
       await interaction.editReply({
         embeds: [buildEmbed(newPCards, finalDealer, bet, false, result)],
-        components: [buildButtons(ownerId, newPCards, finalDealer, bet, true)],
+        components: [buildButtons(ownerId, newPCards, finalDealer, bet, seed, true)],
       });
       return;
     }
 
     await interaction.editReply({
       embeds: [buildEmbed(newPCards, dCards, bet)],
-      components: [buildButtons(ownerId, newPCards, dCards, bet)],
+      components: [buildButtons(ownerId, newPCards, dCards, bet, seed)],
     });
     return;
   }
 
   // ── STAND ─────────────────────────────────────────────────────────────────
   if (state.action === "s") {
-    const finalDealer = dealerPlay(dCards);
+    const finalDealer = dealerPlay(dCards, seed);
     const pTotal = handValue(pCards);
     const dTotal = handValue(finalDealer);
 
@@ -273,19 +344,19 @@ export async function handleButton(interaction: ButtonInteraction): Promise<void
     await applyPayout(ownerId, guildId, bet, result);
     await interaction.editReply({
       embeds: [buildEmbed(pCards, finalDealer, bet, false, result)],
-      components: [buildButtons(ownerId, pCards, finalDealer, bet, true)],
+      components: [buildButtons(ownerId, pCards, finalDealer, bet, seed, true)],
     });
     return;
   }
 
   // ── DOUBLE DOWN ───────────────────────────────────────────────────────────
   if (state.action === "d") {
-    if (pCards.length !== 2) return; // can't double after hitting
+    if (pCards.length !== 2) return; // only on first two cards
 
     const dbUser = await getOrCreateUser(ownerId, guildId, "");
     if (dbUser.credits < bet) {
       await interaction.followUp({
-        content: `Not enough gems to double down (need ${formatNumber(bet)} more).`,
+        content: `Not enough gems to double down — you need **${formatNumber(bet)}** more.`,
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -293,25 +364,26 @@ export async function handleButton(interaction: ButtonInteraction): Promise<void
     await updateUser(ownerId, guildId, { credits: dbUser.credits - bet });
     const doubleBet = bet * 2;
 
-    const newPCards = [...pCards, randomCard()];
-    const pTotal = handValue(newPCards);
+    const newCard   = nextCard(seed, allDealt);
+    const newPCards = [...pCards, newCard];
+    const pTotal    = handValue(newPCards);
 
     if (pTotal > 21) {
       await applyPayout(ownerId, guildId, doubleBet, "bust");
       await interaction.editReply({
         embeds: [buildEmbed(newPCards, dCards, doubleBet, false, "bust")],
-        components: [buildButtons(ownerId, newPCards, dCards, doubleBet, true)],
+        components: [buildButtons(ownerId, newPCards, dCards, doubleBet, seed, true)],
       });
       return;
     }
 
-    const finalDealer = dealerPlay(dCards);
+    const finalDealer = dealerPlay(dCards, seed);
     const dTotal = handValue(finalDealer);
     const result: BJResult = dTotal > 21 || pTotal > dTotal ? "win" : pTotal < dTotal ? "lose" : "push";
     await applyPayout(ownerId, guildId, doubleBet, result);
     await interaction.editReply({
       embeds: [buildEmbed(newPCards, finalDealer, doubleBet, false, result)],
-      components: [buildButtons(ownerId, newPCards, finalDealer, doubleBet, true)],
+      components: [buildButtons(ownerId, newPCards, finalDealer, doubleBet, seed, true)],
     });
     return;
   }
