@@ -54,6 +54,7 @@ import * as help from "./commands/help.js";
 import * as blackjack from "./commands/blackjack.js";
 import * as mines from "./commands/mines.js";
 import * as setupverify from "./commands/setupverify.js";
+import * as tickets from "./commands/tickets.js";
 
 type Command = {
   data: { name: string; toJSON: () => unknown };
@@ -64,7 +65,7 @@ const commands = new Collection<string, Command>();
 const allCommands = [
   rank, leaderboard, chest, daily, weekly, work, crime, balance,
   bank, transfer, gamble, giveaway, shop, admin, ranks, help,
-  blackjack, mines, setupverify,
+  blackjack, mines, setupverify, tickets,
 ];
 for (const cmd of allCommands) {
   commands.set(cmd.data.name, cmd as Command);
@@ -246,6 +247,108 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     return;
   }
 
+  // ── Ticket buttons ────────────────────────────────────────────────────────
+  if (
+    customId === "ticket_staff_report" ||
+    customId === "ticket_scam_report" ||
+    customId === "ticket_general_help"
+  ) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const guild = interaction.guild;
+    if (!guild) {
+      await interaction.editReply({ content: "This can only be used in a server." });
+      return;
+    }
+
+    const typeMap: Record<string, { label: string; emoji: string; color: number; desc: string }> = {
+      ticket_staff_report: {
+        label: "Staff Report",
+        emoji: "🛡️",
+        color: 0xed4245,
+        desc: "Please describe the staff member you are reporting and what happened. Include any evidence (screenshots, timestamps) if you have them.",
+      },
+      ticket_scam_report: {
+        label: "Scam Report",
+        emoji: "🚨",
+        color: 0xfee75c,
+        desc: "Please describe the scam or suspicious activity. Include the user involved, what happened, and any evidence you have.",
+      },
+      ticket_general_help: {
+        label: "General Help",
+        emoji: "❓",
+        color: 0x5865f2,
+        desc: "Please describe your question or issue and our staff will assist you as soon as possible.",
+      },
+    };
+
+    const info = typeMap[customId];
+    const safeName = user.username.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 18);
+    const ticketTypeSlug = customId.replace("ticket_", "").replace("_", "-");
+    const ticketName = `${ticketTypeSlug}-${safeName}`;
+
+    // Check for duplicate open ticket of same type
+    const existing = guild.channels.cache.find(
+      (c) => c.type === ChannelType.GuildText && c.name === ticketName
+    );
+    if (existing) {
+      await interaction.editReply({ content: `You already have an open ticket: <#${existing.id}>` });
+      return;
+    }
+
+    // Find Tickets category if it exists
+    const category = guild.channels.cache.find(
+      (c) => c.type === ChannelType.GuildCategory && c.name.toLowerCase() === "tickets"
+    );
+
+    const ticketChannel = await guild.channels.create({
+      name: ticketName,
+      type: ChannelType.GuildText,
+      parent: category?.id ?? null,
+      permissionOverwrites: [
+        { id: guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] },
+        {
+          id: user.id,
+          allow: [
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.SendMessages,
+            PermissionFlagsBits.ReadMessageHistory,
+          ],
+        },
+      ],
+      topic: `${info.label} ticket for ${user.username}`,
+    });
+
+    const ticketEmbed = new EmbedBuilder()
+      .setColor(info.color)
+      .setTitle(`${info.emoji} ${info.label} — Ticket`)
+      .setDescription(
+        `Hello ${user}! 👋\n\nStaff will be with you shortly.\n\n**Instructions:**\n${info.desc}`
+      )
+      .addFields({ name: "Opened by", value: `${user} (${user.username})`, inline: true })
+      .setFooter({ text: "Click Close Ticket when your issue is resolved" })
+      .setTimestamp();
+
+    const closeRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId("close_ticket")
+        .setLabel("Close Ticket")
+        .setEmoji("🔒")
+        .setStyle(ButtonStyle.Danger)
+    );
+
+    await ticketChannel.send({
+      content: `${user}`,
+      embeds: [ticketEmbed],
+      components: [closeRow],
+    });
+
+    await interaction.editReply({
+      content: `✅ Your **${info.label}** ticket has been opened: <#${ticketChannel.id}>`,
+    });
+    return;
+  }
+
   // ── Bank: Balance button ─────────────────────────────────────────────────
   if (customId === "bank_balance") {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -342,8 +445,14 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
   // ── Close ticket button ──────────────────────────────────────────────────
   if (customId === "close_ticket") {
     const channel = interaction.channel as TextChannel;
-    if (!channel?.name?.startsWith("deposit-")) {
-      await interaction.reply({ content: "This button can only be used in a deposit ticket.", flags: MessageFlags.Ephemeral });
+    const isTicketChannel =
+      channel?.name?.startsWith("deposit-") ||
+      channel?.name?.startsWith("staff-report-") ||
+      channel?.name?.startsWith("scam-report-") ||
+      channel?.name?.startsWith("general-help-");
+
+    if (!isTicketChannel) {
+      await interaction.reply({ content: "This button can only be used inside a ticket channel.", flags: MessageFlags.Ephemeral });
       return;
     }
     await interaction.reply({ content: "🔒 Closing ticket in 5 seconds..." });
