@@ -31,8 +31,14 @@ import {
   getOrCreateBankAccount,
   getGiveaway,
   updateGiveaway,
+  logChestReward,
 } from "./utils/db.js";
-import { formatNumber } from "./utils/constants.js";
+import {
+  formatNumber,
+  CHEST_COST_XP,
+  CHEST_REWARDS,
+  weightedRandom,
+} from "./utils/constants.js";
 
 // Import all commands
 import * as rank from "./commands/rank.js";
@@ -55,6 +61,7 @@ import * as blackjack from "./commands/blackjack.js";
 import * as mines from "./commands/mines.js";
 import * as setupverify from "./commands/setupverify.js";
 import * as tickets from "./commands/tickets.js";
+import * as setchest from "./commands/setchest.js";
 
 type Command = {
   data: { name: string; toJSON: () => unknown };
@@ -65,7 +72,7 @@ const commands = new Collection<string, Command>();
 const allCommands = [
   rank, leaderboard, chest, daily, weekly, work, crime, balance,
   bank, transfer, gamble, giveaway, shop, admin, ranks, help,
-  blackjack, mines, setupverify, tickets,
+  blackjack, mines, setupverify, tickets, setchest,
 ];
 for (const cmd of allCommands) {
   commands.set(cmd.data.name, cmd as Command);
@@ -350,6 +357,65 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
 
     await interaction.editReply({
       content: `✅ Your **${info.label}** ticket has been opened: <#${ticketChannel.id}>`,
+    });
+    return;
+  }
+
+  // ── Chest panel button ───────────────────────────────────────────────────
+  if (customId === "chest_open") {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const dbUser = await getOrCreateUser(user.id, guildId!, user.username);
+
+    if (dbUser.xp < CHEST_COST_XP) {
+      const needed = CHEST_COST_XP - dbUser.xp;
+      await interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xed4245)
+            .setTitle("❌ Not Enough XP")
+            .setDescription(
+              `You need **${CHEST_COST_XP} XP** to open a chest.\n` +
+              `You have **${formatNumber(dbUser.xp)} XP** — you need **${formatNumber(needed)}** more.\n\n` +
+              `💬 Earn XP by chatting — every 10,000 gems gives you 100 XP!`
+            )
+            .setTimestamp(),
+        ],
+      });
+      return;
+    }
+
+    const reward = weightedRandom(CHEST_REWARDS);
+    const creditsWon =
+      reward.minCredits > 0
+        ? Math.floor(Math.random() * (reward.maxCredits - reward.minCredits + 1)) + reward.minCredits
+        : 0;
+    const xpWon = reward.xp ?? 0;
+
+    const newXp      = dbUser.xp - CHEST_COST_XP + xpWon;
+    const newCredits = dbUser.credits + creditsWon;
+
+    await updateUser(user.id, guildId!, { xp: newXp, credits: newCredits });
+    await logChestReward(user.id, guildId!, reward.type, creditsWon || xpWon, CHEST_COST_XP);
+
+    const rewardDesc =
+      creditsWon > 0
+        ? `**+${formatNumber(creditsWon)} gems** 💎`
+        : `**+${formatNumber(xpWon)} XP** ⭐`;
+
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xffd700)
+          .setTitle(`${reward.emoji} ${reward.type}!`)
+          .setDescription(`You cracked open the mystery chest and won:\n\n${rewardDesc}`)
+          .addFields(
+            { name: "💰 Gems", value: formatNumber(newCredits), inline: true },
+            { name: "🌟 XP Remaining", value: formatNumber(newXp), inline: true },
+          )
+          .setFooter({ text: `Spent ${CHEST_COST_XP} XP · Open another when you have enough!` })
+          .setTimestamp(),
+      ],
     });
     return;
   }
