@@ -6,31 +6,34 @@ import {
   ButtonStyle,
   TextChannel,
   GuildMember,
-  Role,
 } from "discord.js";
-import { getOrCreateGuildSettings, getOrCreateUser, updateUser } from "../utils/db.js";
+import { getOrCreateGuildSettings, updateGuildSettings, getOrCreateUser, updateUser } from "../utils/db.js";
 import { formatNumber } from "../utils/constants.js";
 
-const PRIZE_TOTAL      = 100_000_000;
-const WINNER_COUNT     = 2;
-const PRIZE_PER_WINNER = PRIZE_TOTAL / WINNER_COUNT; // 50M each
-const GIVEAWAY_DURATION_MS = 45 * 60 * 1000;         // 45 minutes
-const CYCLE_INTERVAL_MS    = 2 * 60 * 60 * 1000;     // every 2 hours
+const PRIZE_TOTAL         = 100_000_000;
+const WINNER_COUNT        = 2;
+const PRIZE_PER_WINNER    = PRIZE_TOTAL / WINNER_COUNT; // 50M each
+const GIVEAWAY_DURATION_MS = 45 * 60 * 1000;            // 45 minutes
+const CYCLE_INTERVAL_MS   = 2 * 60 * 60 * 1000;         // 2 hours
 
-// Active giveaway state per round
+// ── Active round state ───────────────────────────────────────────────────────
 export interface BoosterRound {
-  roundId: string;
-  guildId: string;
+  roundId:   string;
+  guildId:   string;
   channelId: string;
   messageId: string | null;
-  entrants: Set<string>;
-  endsAt: number;
-  ended: boolean;
+  entrants:  Set<string>;
+  endsAt:    number;
+  ended:     boolean;
 }
 
-// roundId → round state
 export const activeRounds = new Map<string, BoosterRound>();
 
+// Track guilds that already have a scheduled cycle (reset on restart is fine
+// because we derive timing from DB, not memory)
+const scheduledGuilds = new Set<string>();
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function makeRoundId(): string {
   return `bgaw_${Date.now()}_${Math.floor(Math.random() * 9999)}`;
 }
@@ -41,122 +44,6 @@ function timeLeft(endsAt: number): string {
   const m = Math.floor(ms / 60_000);
   const s = Math.floor((ms % 60_000) / 1_000);
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
-}
-
-export async function postGiveaway(client: Client, guildId: string, channelId: string): Promise<void> {
-  const guild = client.guilds.cache.get(guildId);
-  if (!guild) return;
-
-  const channel = guild.channels.cache.get(channelId) as TextChannel | undefined;
-  if (!channel) return;
-
-  const roundId = makeRoundId();
-  const endsAt  = Date.now() + GIVEAWAY_DURATION_MS;
-
-  const embed = buildEmbed(0, endsAt);
-  const row   = buildRow(roundId);
-
-  const msg = await channel.send({ embeds: [embed], components: [row] }).catch(() => null);
-  if (!msg) return;
-
-  const round: BoosterRound = {
-    roundId,
-    guildId,
-    channelId,
-    messageId: msg.id,
-    entrants: new Set(),
-    endsAt,
-    ended: false,
-  };
-  activeRounds.set(roundId, round);
-
-  // Schedule giveaway end
-  setTimeout(() => endGiveaway(client, roundId), GIVEAWAY_DURATION_MS);
-}
-
-async function endGiveaway(client: Client, roundId: string): Promise<void> {
-  const round = activeRounds.get(roundId);
-  if (!round || round.ended) return;
-  round.ended = true;
-
-  const guild = client.guilds.cache.get(round.guildId);
-  if (!guild) return;
-
-  const channel = guild.channels.cache.get(round.channelId) as TextChannel | undefined;
-  if (!channel) return;
-
-  // Filter entrants: must still be in server and have the booster role
-  const boosterRole = guild.roles.premiumSubscriberRole;
-  const eligibleEntrants: string[] = [];
-
-  for (const userId of round.entrants) {
-    const member = guild.members.cache.get(userId) ??
-      await guild.members.fetch(userId).catch(() => null);
-    if (!member) continue;
-    if (!boosterRole || member.roles.cache.has(boosterRole.id)) {
-      eligibleEntrants.push(userId);
-    }
-  }
-
-  // Pick up to 2 random winners
-  const shuffled  = eligibleEntrants.sort(() => Math.random() - 0.5);
-  const winners   = shuffled.slice(0, WINNER_COUNT);
-  const winnerCount = winners.length;
-
-  // Award gems to each winner
-  for (const winnerId of winners) {
-    const dbUser = await getOrCreateUser(winnerId, round.guildId, "").catch(() => null);
-    if (dbUser) {
-      await updateUser(winnerId, round.guildId, {
-        credits: dbUser.credits + PRIZE_PER_WINNER,
-      }).catch(() => {});
-    }
-  }
-
-  // Build result embed
-  let resultDesc: string;
-  if (winners.length === 0) {
-    resultDesc = "No eligible server boosters entered this giveaway.";
-  } else if (winners.length === 1) {
-    resultDesc = `🎉 ${`<@${winners[0]}>`} won the full **${formatNumber(PRIZE_TOTAL)} gems**!`;
-  } else {
-    resultDesc = winners
-      .map((w) => `🎉 <@${w}> — **+${formatNumber(PRIZE_PER_WINNER)} gems**`)
-      .join("\n");
-  }
-
-  const endEmbed = new EmbedBuilder()
-    .setColor(winners.length > 0 ? 0xffd700 : 0x99aab5)
-    .setTitle("🎁 Booster Giveaway — Ended!")
-    .setDescription(
-      [
-        winners.length > 0
-          ? `The **${formatNumber(PRIZE_TOTAL)} gem** prize has been split between ${winnerCount} winner${winnerCount !== 1 ? "s" : ""}!`
-          : "This giveaway ended with no winners.",
-        "",
-        resultDesc,
-        "",
-        `**Total entries:** ${round.entrants.size}`,
-      ].join("\n")
-    )
-    .setFooter({ text: "Next booster giveaway in ~2 hours" })
-    .setTimestamp();
-
-  // Edit original message
-  if (round.messageId) {
-    await channel.messages.fetch(round.messageId)
-      .then((m) => m.edit({ embeds: [endEmbed], components: [] }))
-      .catch(() => {});
-  }
-
-  // Ping winners
-  if (winners.length > 0) {
-    await channel.send({
-      content: `🎉 Congratulations ${winners.map((w) => `<@${w}>`).join(" and ")}! You each won **${formatNumber(PRIZE_PER_WINNER)} gems** from the Booster Giveaway!`,
-    }).catch(() => {});
-  }
-
-  activeRounds.delete(roundId);
 }
 
 function buildEmbed(entries: number, endsAt: number): EmbedBuilder {
@@ -188,7 +75,118 @@ function buildRow(roundId: string): ActionRowBuilder<ButtonBuilder> {
   );
 }
 
-// Called from index.ts button handler
+// ── Post a giveaway & stamp the DB ────────────────────────────────────────────
+export async function postGiveaway(client: Client, guildId: string, channelId: string): Promise<void> {
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) return;
+
+  const channel = guild.channels.cache.get(channelId) as TextChannel | undefined;
+  if (!channel) return;
+
+  // Stamp BEFORE posting so a crash during post still throttles the next attempt
+  await updateGuildSettings(guildId, { lastBoosterGiveawayAt: new Date() }).catch(() => {});
+
+  const roundId = makeRoundId();
+  const endsAt  = Date.now() + GIVEAWAY_DURATION_MS;
+
+  const msg = await channel.send({ embeds: [buildEmbed(0, endsAt)], components: [buildRow(roundId)] }).catch(() => null);
+  if (!msg) return;
+
+  const round: BoosterRound = {
+    roundId,
+    guildId,
+    channelId,
+    messageId: msg.id,
+    entrants: new Set(),
+    endsAt,
+    ended: false,
+  };
+  activeRounds.set(roundId, round);
+
+  setTimeout(() => endGiveaway(client, roundId), GIVEAWAY_DURATION_MS);
+}
+
+// ── End a giveaway ────────────────────────────────────────────────────────────
+async function endGiveaway(client: Client, roundId: string): Promise<void> {
+  const round = activeRounds.get(roundId);
+  if (!round || round.ended) return;
+  round.ended = true;
+
+  const guild = client.guilds.cache.get(round.guildId);
+  if (!guild) return;
+
+  const channel = guild.channels.cache.get(round.channelId) as TextChannel | undefined;
+  if (!channel) return;
+
+  const boosterRole = guild.roles.premiumSubscriberRole;
+  const eligibleEntrants: string[] = [];
+
+  for (const userId of round.entrants) {
+    const member =
+      guild.members.cache.get(userId) ??
+      (await guild.members.fetch(userId).catch(() => null));
+    if (!member) continue;
+    if (!boosterRole || member.roles.cache.has(boosterRole.id)) {
+      eligibleEntrants.push(userId);
+    }
+  }
+
+  const shuffled   = eligibleEntrants.sort(() => Math.random() - 0.5);
+  const winners    = shuffled.slice(0, WINNER_COUNT);
+  const winnerCount = winners.length;
+
+  for (const winnerId of winners) {
+    const dbUser = await getOrCreateUser(winnerId, round.guildId, "").catch(() => null);
+    if (dbUser) {
+      await updateUser(winnerId, round.guildId, { credits: dbUser.credits + PRIZE_PER_WINNER }).catch(() => {});
+    }
+  }
+
+  let resultDesc: string;
+  if (winners.length === 0) {
+    resultDesc = "No eligible server boosters entered this giveaway.";
+  } else if (winners.length === 1) {
+    resultDesc = `🎉 <@${winners[0]}> won the full **${formatNumber(PRIZE_TOTAL)} gems**!`;
+  } else {
+    resultDesc = winners.map((w) => `🎉 <@${w}> — **+${formatNumber(PRIZE_PER_WINNER)} gems**`).join("\n");
+  }
+
+  const endEmbed = new EmbedBuilder()
+    .setColor(winners.length > 0 ? 0xffd700 : 0x99aab5)
+    .setTitle("🎁 Booster Giveaway — Ended!")
+    .setDescription(
+      [
+        winners.length > 0
+          ? `The **${formatNumber(PRIZE_TOTAL)} gem** prize has been split between ${winnerCount} winner${winnerCount !== 1 ? "s" : ""}!`
+          : "This giveaway ended with no winners.",
+        "",
+        resultDesc,
+        "",
+        `**Total entries:** ${round.entrants.size}`,
+      ].join("\n")
+    )
+    .setFooter({ text: "Next booster giveaway in ~2 hours" })
+    .setTimestamp();
+
+  if (round.messageId) {
+    await channel.messages
+      .fetch(round.messageId)
+      .then((m) => m.edit({ embeds: [endEmbed], components: [] }))
+      .catch(() => {});
+  }
+
+  if (winners.length > 0) {
+    await channel
+      .send({
+        content: `🎉 Congratulations ${winners.map((w) => `<@${w}>`).join(" and ")}! You each won **${formatNumber(PRIZE_PER_WINNER)} gems** from the Booster Giveaway!`,
+      })
+      .catch(() => {});
+  }
+
+  activeRounds.delete(roundId);
+}
+
+// ── Button handler ────────────────────────────────────────────────────────────
 export async function handleBoosterEntry(
   client: Client,
   roundId: string,
@@ -204,25 +202,23 @@ export async function handleBoosterEntry(
   if (!guild) return "❌ Could not find server.";
 
   const boosterRole = guild.roles.premiumSubscriberRole;
-  const member = guild.members.cache.get(userId) ??
-    await guild.members.fetch(userId).catch(() => null) as GuildMember | null;
+  const member =
+    (guild.members.cache.get(userId) ??
+      (await guild.members.fetch(userId).catch(() => null))) as GuildMember | null;
 
   if (!member) return "❌ Could not verify your membership.";
   if (boosterRole && !member.roles.cache.has(boosterRole.id)) {
     return "❌ You must be a 💜 **Server Booster** to enter this giveaway.";
   }
 
-  if (round.entrants.has(userId)) {
-    return "✅ You are already entered in this giveaway!";
-  }
+  if (round.entrants.has(userId)) return "✅ You are already entered in this giveaway!";
 
   round.entrants.add(userId);
 
-  // Update the embed with new entry count
-  const guild2 = client.guilds.cache.get(round.guildId);
-  const channel = guild2?.channels.cache.get(round.channelId) as TextChannel | undefined;
-  if (channel && round.messageId) {
-    channel.messages.fetch(round.messageId)
+  const ch = (client.guilds.cache.get(round.guildId)?.channels.cache.get(round.channelId)) as TextChannel | undefined;
+  if (ch && round.messageId) {
+    ch.messages
+      .fetch(round.messageId)
       .then((m) => m.edit({ embeds: [buildEmbed(round.entrants.size, round.endsAt)] }))
       .catch(() => {});
   }
@@ -230,9 +226,7 @@ export async function handleBoosterEntry(
   return `✅ You're entered! Good luck! 🎉\n💜 **${formatNumber(PRIZE_PER_WINNER)} gems** could be yours in ${timeLeft(round.endsAt)}.`;
 }
 
-// Resolve the booster giveaway channel for a guild:
-// 1. Check DB for admin-configured channel
-// 2. Fall back to any channel named "booster-giveaway" (case-insensitive)
+// ── Channel resolver ──────────────────────────────────────────────────────────
 async function resolveChannel(client: Client, guildId: string): Promise<string | null> {
   const settings = await getOrCreateGuildSettings(guildId).catch(() => null);
   if (settings?.boosterGiveawayChannelId) return settings.boosterGiveawayChannelId;
@@ -242,25 +236,13 @@ async function resolveChannel(client: Client, guildId: string): Promise<string |
 
   const auto = guild.channels.cache.find(
     (c) =>
-      c.type === 0 /* GuildText */ &&
+      c.type === 0 &&
       c.name.toLowerCase().replace(/[\s_]/g, "-") === "booster-giveaway"
   );
   return auto?.id ?? null;
 }
 
-// Track which guilds already have a running interval so we don't double-schedule
-const scheduledGuilds = new Set<string>();
-
-// Start the automated cycle per guild
-export function startBoosterGiveaway(client: Client): void {
-  // Delay 3 seconds to ensure guild channels are fully cached after ready
-  setTimeout(() => {
-    client.guilds.cache.forEach((guild) => scheduleForGuild(client, guild.id));
-  }, 3_000);
-
-  client.on("guildCreate", (guild) => scheduleForGuild(client, guild.id));
-}
-
+// ── Scheduler — DB-backed timing so restarts don't re-fire early ──────────────
 async function scheduleForGuild(client: Client, guildId: string): Promise<void> {
   if (scheduledGuilds.has(guildId)) return;
 
@@ -269,11 +251,33 @@ async function scheduleForGuild(client: Client, guildId: string): Promise<void> 
 
   scheduledGuilds.add(guildId);
 
-  // Post immediately, then every 2 hours
-  await postGiveaway(client, guildId, channelId);
+  // Read when the last giveaway was posted from DB
+  const settings = await getOrCreateGuildSettings(guildId).catch(() => null);
+  const lastAt   = settings?.lastBoosterGiveawayAt ? new Date(settings.lastBoosterGiveawayAt).getTime() : 0;
+  const elapsed  = Date.now() - lastAt;
+  const msUntilNext = Math.max(0, CYCLE_INTERVAL_MS - elapsed);
 
-  setInterval(async () => {
+  console.log(
+    `[BoosterGiveaway] Guild ${guildId}: last posted ${Math.round(elapsed / 60_000)}m ago. ` +
+    `Next in ${Math.round(msUntilNext / 60_000)}m.`
+  );
+
+  // Wait out whatever time is remaining, then repeat every 2 hours
+  setTimeout(async () => {
     const ch = await resolveChannel(client, guildId);
     if (ch) await postGiveaway(client, guildId, ch);
-  }, CYCLE_INTERVAL_MS);
+
+    setInterval(async () => {
+      const ch2 = await resolveChannel(client, guildId);
+      if (ch2) await postGiveaway(client, guildId, ch2);
+    }, CYCLE_INTERVAL_MS);
+  }, msUntilNext);
+}
+
+export function startBoosterGiveaway(client: Client): void {
+  setTimeout(() => {
+    client.guilds.cache.forEach((guild) => scheduleForGuild(client, guild.id));
+  }, 3_000);
+
+  client.on("guildCreate", (guild) => scheduleForGuild(client, guild.id));
 }
