@@ -69,6 +69,7 @@ import * as activecodes from "./commands/activecodes.js";
 import * as redeem from "./commands/redeem.js";
 import * as bjduel from "./commands/bjduel.js";
 import { startBoosterGiveaway, activeRounds, handleBoosterEntry } from "./systems/boosterGiveaway.js";
+import { startAutoGiveaway, handleAutoGawEntry } from "./systems/autoGiveaway.js";
 
 type Command = {
   data: { name: string; toJSON: () => unknown };
@@ -117,6 +118,7 @@ client.once(Events.ClientReady, async (c) => {
   startGiveawayManager(client);
   startInviteTracker(client);
   startBoosterGiveaway(client);
+  startAutoGiveaway(client);
 
   // Cache invites for all guilds
   for (const [, guild] of c.guilds.cache) {
@@ -384,6 +386,15 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const roundId = customId.replace("bgaw_enter_", "");
     const result  = await handleBoosterEntry(client, roundId, user.id, guildId!);
+    await interaction.editReply({ content: result });
+    return;
+  }
+
+  // ── Auto giveaway enter button ────────────────────────────────────────────
+  if (customId.startsWith("autogaw_enter_")) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const roundId = customId.replace("autogaw_enter_", "");
+    const result  = await handleAutoGawEntry(roundId, user.id);
     await interaction.editReply({ content: result });
     return;
   }
