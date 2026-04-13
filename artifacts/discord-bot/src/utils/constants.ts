@@ -1,11 +1,11 @@
 export const RANKS = [
-  { name: "Member",   emoji: "⚪", minCredits: 0,         color: 0x99aab5 },
-  { name: "Copper",   emoji: "🟤", minCredits: 45_000,    color: 0xb87333 },
-  { name: "Gold",     emoji: "🟡", minCredits: 125_000,   color: 0xffd700 },
-  { name: "Emerald",  emoji: "🟢", minCredits: 425_000,   color: 0x50c878 },
-  { name: "Diamond",  emoji: "🔵", minCredits: 850_000,   color: 0x00bfff },
-  { name: "Ruby",     emoji: "🔴", minCredits: 1_650_000, color: 0xe0115f },
-  { name: "Titanium", emoji: "⚫", minCredits: 5_000_000, color: 0x878787 },
+  { name: "Member",   emoji: "⚪", minCredits: 0,               color: 0x99aab5 },
+  { name: "Copper",   emoji: "🟤", minCredits: 450_000_000,     color: 0xb87333 },
+  { name: "Gold",     emoji: "🟡", minCredits: 1_250_000_000,   color: 0xffd700 },
+  { name: "Emerald",  emoji: "🟢", minCredits: 4_250_000_000,   color: 0x50c878 },
+  { name: "Diamond",  emoji: "🔵", minCredits: 8_500_000_000,   color: 0x00bfff },
+  { name: "Ruby",     emoji: "🔴", minCredits: 16_500_000_000,  color: 0xe0115f },
+  { name: "Titanium", emoji: "⚫", minCredits: 50_000_000_000,  color: 0x878787 },
 ] as const;
 
 export const CREDITS_PER_MESSAGE_MIN = 5;
