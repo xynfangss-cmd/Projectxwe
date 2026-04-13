@@ -9,7 +9,7 @@ import {
   MessageFlags,
 } from "discord.js";
 import { getOrCreateUser, updateUser } from "../utils/db.js";
-import { formatNumber } from "../utils/constants.js";
+import { formatNumber, parseAmount } from "../utils/constants.js";
 
 // ── Bitmask helpers (20 tiles, indices 0-19) ─────────────────────────────────
 const TOTAL_TILES = 20;
@@ -191,8 +191,8 @@ function buildComponents(
 export const data = new SlashCommandBuilder()
   .setName("mines")
   .setDescription("Play Mines — reveal gems without hitting a bomb!")
-  .addIntegerOption((opt) =>
-    opt.setName("bet").setDescription("Amount of gems to bet").setRequired(true).setMinValue(100)
+  .addStringOption((opt) =>
+    opt.setName("bet").setDescription("Amount of gems to bet (e.g. 1k, 5m, 100)").setRequired(true)
   )
   .addIntegerOption((opt) =>
     opt.setName("mines").setDescription("Number of mines (1–9, default 3)").setRequired(false).setMinValue(1).setMaxValue(9)
@@ -201,7 +201,12 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const userId = interaction.user.id;
   const guildId = interaction.guildId!;
-  const bet = interaction.options.getInteger("bet", true);
+  const betRaw = interaction.options.getString("bet", true);
+  const bet    = parseAmount(betRaw);
+  if (!bet || bet < 100) {
+    await interaction.reply({ content: "❌ Invalid bet. Minimum is 100 gems. Use e.g. `100`, `1k`, `5m`.", flags: 64 });
+    return;
+  }
   const mineCount = interaction.options.getInteger("mines") ?? 3;
 
   const dbUser = await getOrCreateUser(userId, guildId, interaction.user.username);

@@ -5,7 +5,7 @@ import {
   EmbedBuilder,
 } from "discord.js";
 import { createCode } from "../utils/db.js";
-import { formatNumber } from "../utils/constants.js";
+import { formatNumber, parseAmount } from "../utils/constants.js";
 
 function randomCode(length = 8): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -16,8 +16,8 @@ export const data = new SlashCommandBuilder()
   .setName("createcode")
   .setDescription("Create a redeemable gem code")
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-  .addIntegerOption((opt) =>
-    opt.setName("gems").setDescription("How many gems this code gives").setRequired(true).setMinValue(1)
+  .addStringOption((opt) =>
+    opt.setName("gems").setDescription("How many gems this code gives (e.g. 1k, 5m, 100m)").setRequired(true)
   )
   .addIntegerOption((opt) =>
     opt.setName("uses").setDescription("How many times this code can be used").setRequired(true).setMinValue(1)
@@ -29,7 +29,12 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
 
-  const gems    = interaction.options.getInteger("gems", true);
+  const gemsRaw = interaction.options.getString("gems", true);
+  const gems    = parseAmount(gemsRaw);
+  if (!gems || gems < 1) {
+    await interaction.editReply({ content: `❌ Invalid gem amount. Use something like \`1k\`, \`50m\`, or \`100000\`.` });
+    return;
+  }
   const uses    = interaction.options.getInteger("uses", true);
   const custom  = interaction.options.getString("code");
   const guildId = interaction.guildId!;

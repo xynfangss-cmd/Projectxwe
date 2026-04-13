@@ -8,6 +8,7 @@ import {
   SLOT_SYMBOLS,
   SLOT_PAYOUTS,
   formatNumber,
+  parseAmount,
 } from "../utils/constants.js";
 
 function spinSlots(): [string, string, string] {
@@ -38,16 +39,16 @@ export const data = new SlashCommandBuilder()
     sub
       .setName("slots")
       .setDescription("Spin the slot machine")
-      .addIntegerOption((opt) =>
-        opt.setName("bet").setDescription("Amount to bet").setRequired(true).setMinValue(100)
+      .addStringOption((opt) =>
+        opt.setName("bet").setDescription("Amount to bet (e.g. 1k, 5m, 100)").setRequired(true)
       )
   )
   .addSubcommand((sub) =>
     sub
       .setName("coinflip")
       .setDescription("Flip a coin — heads or tails?")
-      .addIntegerOption((opt) =>
-        opt.setName("bet").setDescription("Amount to bet").setRequired(true).setMinValue(1)
+      .addStringOption((opt) =>
+        opt.setName("bet").setDescription("Amount to bet (e.g. 1k, 5m, 100)").setRequired(true)
       )
       .addStringOption((opt) =>
         opt.setName("choice").setDescription("Heads or tails?").setRequired(true)
@@ -58,8 +59,8 @@ export const data = new SlashCommandBuilder()
     sub
       .setName("dice")
       .setDescription("Roll dice — pick a number 1-6")
-      .addIntegerOption((opt) =>
-        opt.setName("bet").setDescription("Amount to bet").setRequired(true).setMinValue(1)
+      .addStringOption((opt) =>
+        opt.setName("bet").setDescription("Amount to bet (e.g. 1k, 5m, 100)").setRequired(true)
       )
       .addIntegerOption((opt) =>
         opt.setName("number").setDescription("Pick a number (1-6)").setRequired(true)
@@ -70,8 +71,13 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply();
-  const sub = interaction.options.getSubcommand();
-  const bet = interaction.options.getInteger("bet", true);
+  const sub    = interaction.options.getSubcommand();
+  const betRaw = interaction.options.getString("bet", true);
+  const bet    = parseAmount(betRaw);
+  if (!bet || bet < 1) {
+    await interaction.editReply({ content: "❌ Invalid bet. Use e.g. `100`, `1k`, `5m`." });
+    return;
+  }
   const userId = interaction.user.id;
   const guildId = interaction.guildId!;
   const user = await getOrCreateUser(userId, guildId, interaction.user.username);

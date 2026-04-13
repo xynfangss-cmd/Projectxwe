@@ -5,7 +5,7 @@ import {
   MessageFlags,
 } from "discord.js";
 import { getOrCreateUser, updateUser } from "../utils/db.js";
-import { formatNumber } from "../utils/constants.js";
+import { formatNumber, parseAmount } from "../utils/constants.js";
 
 export const data = new SlashCommandBuilder()
   .setName("gift")
@@ -13,15 +13,20 @@ export const data = new SlashCommandBuilder()
   .addUserOption((opt) =>
     opt.setName("member").setDescription("The member to gift gems to").setRequired(true)
   )
-  .addIntegerOption((opt) =>
-    opt.setName("amount").setDescription("How many gems to gift").setRequired(true).setMinValue(1)
+  .addStringOption((opt) =>
+    opt.setName("amount").setDescription("How many gems to gift (e.g. 1k, 5m, 100)").setRequired(true)
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply();
 
   const target  = interaction.options.getUser("member", true);
-  const amount  = interaction.options.getInteger("amount", true);
+  const amountRaw = interaction.options.getString("amount", true);
+  const amount    = parseAmount(amountRaw);
+  if (!amount || amount < 1) {
+    await interaction.editReply({ content: `❌ Invalid amount. Use a number like \`500\`, \`10k\`, or \`5m\`.` });
+    return;
+  }
   const guildId = interaction.guildId!;
   const sender  = interaction.user;
 

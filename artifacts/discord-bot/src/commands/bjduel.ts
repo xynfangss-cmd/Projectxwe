@@ -12,7 +12,7 @@ import { db } from "@workspace/db";
 import { discordDuels } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { getOrCreateUser, updateUser } from "../utils/db.js";
-import { formatNumber } from "../utils/constants.js";
+import { formatNumber, parseAmount } from "../utils/constants.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type DuelStatus = "pending" | "challenger_turn" | "opponent_turn" | "done";
@@ -280,15 +280,20 @@ export const data = new SlashCommandBuilder()
   .addUserOption((opt) =>
     opt.setName("opponent").setDescription("The member to challenge").setRequired(true)
   )
-  .addIntegerOption((opt) =>
-    opt.setName("bet").setDescription("How many gems to wager").setRequired(true).setMinValue(1000)
+  .addStringOption((opt) =>
+    opt.setName("bet").setDescription("How many gems to wager (e.g. 1k, 5m, 100)").setRequired(true)
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply();
 
   const opponent   = interaction.options.getUser("opponent", true);
-  const bet        = interaction.options.getInteger("bet", true);
+  const betRaw     = interaction.options.getString("bet", true);
+  const bet        = parseAmount(betRaw);
+  if (!bet || bet < 1000) {
+    await interaction.editReply({ content: "❌ Invalid bet. Minimum is 1,000 gems. Use e.g. `1000`, `5k`, `1m`." });
+    return;
+  }
   const guildId    = interaction.guildId!;
   const challenger = interaction.user;
 
