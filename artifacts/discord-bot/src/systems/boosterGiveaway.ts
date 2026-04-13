@@ -43,7 +43,7 @@ function timeLeft(endsAt: number): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-async function postGiveaway(client: Client, guildId: string, channelId: string): Promise<void> {
+export async function postGiveaway(client: Client, guildId: string, channelId: string): Promise<void> {
   const guild = client.guilds.cache.get(guildId);
   if (!guild) return;
 
@@ -248,17 +248,28 @@ async function resolveChannel(client: Client, guildId: string): Promise<string |
   return auto?.id ?? null;
 }
 
+// Track which guilds already have a running interval so we don't double-schedule
+const scheduledGuilds = new Set<string>();
+
 // Start the automated cycle per guild
 export function startBoosterGiveaway(client: Client): void {
-  client.guilds.cache.forEach((guild) => scheduleForGuild(client, guild.id));
+  // Delay 3 seconds to ensure guild channels are fully cached after ready
+  setTimeout(() => {
+    client.guilds.cache.forEach((guild) => scheduleForGuild(client, guild.id));
+  }, 3_000);
+
   client.on("guildCreate", (guild) => scheduleForGuild(client, guild.id));
 }
 
 async function scheduleForGuild(client: Client, guildId: string): Promise<void> {
+  if (scheduledGuilds.has(guildId)) return;
+
   const channelId = await resolveChannel(client, guildId);
   if (!channelId) return;
 
-  // Post immediately on start, then every 2 hours
+  scheduledGuilds.add(guildId);
+
+  // Post immediately, then every 2 hours
   await postGiveaway(client, guildId, channelId);
 
   setInterval(async () => {

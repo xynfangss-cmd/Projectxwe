@@ -63,6 +63,7 @@ import * as setupverify from "./commands/setupverify.js";
 import * as tickets from "./commands/tickets.js";
 import * as setchest from "./commands/setchest.js";
 import * as setupboostergiveaway from "./commands/setupboostergiveaway.js";
+import * as startboostergiveaway from "./commands/startboostergiveaway.js";
 import { startBoosterGiveaway, activeRounds, handleBoosterEntry } from "./systems/boosterGiveaway.js";
 
 type Command = {
@@ -74,7 +75,7 @@ const commands = new Collection<string, Command>();
 const allCommands = [
   rank, leaderboard, chest, daily, weekly, work, crime, balance,
   bank, transfer, gamble, giveaway, shop, admin, ranks, help,
-  blackjack, mines, setupverify, tickets, setchest, setupboostergiveaway,
+  blackjack, mines, setupverify, tickets, setchest, setupboostergiveaway, startboostergiveaway,
 ];
 for (const cmd of allCommands) {
   commands.set(cmd.data.name, cmd as Command);
