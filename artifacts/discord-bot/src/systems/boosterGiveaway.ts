@@ -230,6 +230,24 @@ export async function handleBoosterEntry(
   return `✅ You're entered! Good luck! 🎉\n💜 **${formatNumber(PRIZE_PER_WINNER)} gems** could be yours in ${timeLeft(round.endsAt)}.`;
 }
 
+// Resolve the booster giveaway channel for a guild:
+// 1. Check DB for admin-configured channel
+// 2. Fall back to any channel named "booster-giveaway" (case-insensitive)
+async function resolveChannel(client: Client, guildId: string): Promise<string | null> {
+  const settings = await getOrCreateGuildSettings(guildId).catch(() => null);
+  if (settings?.boosterGiveawayChannelId) return settings.boosterGiveawayChannelId;
+
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) return null;
+
+  const auto = guild.channels.cache.find(
+    (c) =>
+      c.type === 0 /* GuildText */ &&
+      c.name.toLowerCase().replace(/[\s_]/g, "-") === "booster-giveaway"
+  );
+  return auto?.id ?? null;
+}
+
 // Start the automated cycle per guild
 export function startBoosterGiveaway(client: Client): void {
   client.guilds.cache.forEach((guild) => scheduleForGuild(client, guild.id));
@@ -237,16 +255,14 @@ export function startBoosterGiveaway(client: Client): void {
 }
 
 async function scheduleForGuild(client: Client, guildId: string): Promise<void> {
-  const settings = await getOrCreateGuildSettings(guildId).catch(() => null);
-  const channelId = settings?.boosterGiveawayChannelId;
+  const channelId = await resolveChannel(client, guildId);
   if (!channelId) return;
 
   // Post immediately on start, then every 2 hours
   await postGiveaway(client, guildId, channelId);
 
   setInterval(async () => {
-    const freshSettings = await getOrCreateGuildSettings(guildId).catch(() => null);
-    const ch = freshSettings?.boosterGiveawayChannelId;
+    const ch = await resolveChannel(client, guildId);
     if (ch) await postGiveaway(client, guildId, ch);
   }, CYCLE_INTERVAL_MS);
 }
