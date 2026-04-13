@@ -44,9 +44,16 @@ export async function getOrCreateUser(userId: string, guildId: string, username?
 }
 
 export async function updateUser(userId: string, guildId: string, data: Partial<DiscordUser>) {
+  const merged: Partial<DiscordUser> = { ...data };
+
+  // Auto-recalculate rank from current credits whenever credits change
+  if ("credits" in data && data.credits !== undefined && !("rank" in data)) {
+    merged.rank = getRankForCredits(data.credits).name;
+  }
+
   const [updated] = await db
     .update(discordUsers)
-    .set({ ...data, updatedAt: new Date() })
+    .set({ ...merged, updatedAt: new Date() })
     .where(and(eq(discordUsers.userId, userId), eq(discordUsers.guildId, guildId)))
     .returning();
   return updated;
@@ -56,7 +63,7 @@ export async function addCredits(userId: string, guildId: string, amount: number
   const user = await getOrCreateUser(userId, guildId);
   const newCredits = user.credits + amount;
   const newTotalEarned = user.totalCreditsEarned + Math.max(0, amount);
-  const newRank = getRankForCredits(newTotalEarned);
+  const newRank = getRankForCredits(Math.max(0, newCredits)); // rank based on current balance
 
   // XP from gems
   const newXpFromCredits = Math.floor(newTotalEarned / 10_000) * 100;
