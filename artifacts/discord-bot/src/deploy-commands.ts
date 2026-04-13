@@ -28,12 +28,13 @@ import * as createcode from "./commands/createcode.js";
 import * as activecodes from "./commands/activecodes.js";
 import * as redeem from "./commands/redeem.js";
 import * as bjduel from "./commands/bjduel.js";
+import * as gift from "./commands/gift.js";
 
 const allCommands = [
   rank, leaderboard, chest, daily, weekly, work, crime, balance,
   bank, transfer, gamble, giveaway, shop, admin, ranks, help,
   blackjack, mines, setupverify, tickets, setchest, setupboostergiveaway, startboostergiveaway,
-  createcode, activecodes, redeem, bjduel,
+  createcode, activecodes, redeem, bjduel, gift,
 ];
 const commandsJSON = allCommands.map((cmd) => cmd.data.toJSON());
 

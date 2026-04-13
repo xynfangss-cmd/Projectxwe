@@ -68,6 +68,7 @@ import * as createcode from "./commands/createcode.js";
 import * as activecodes from "./commands/activecodes.js";
 import * as redeem from "./commands/redeem.js";
 import * as bjduel from "./commands/bjduel.js";
+import * as gift from "./commands/gift.js";
 import { startBoosterGiveaway, activeRounds, handleBoosterEntry } from "./systems/boosterGiveaway.js";
 import { startAutoGiveaway, handleAutoGawEntry } from "./systems/autoGiveaway.js";
 
@@ -81,7 +82,7 @@ const allCommands = [
   rank, leaderboard, chest, daily, weekly, work, crime, balance,
   bank, transfer, gamble, giveaway, shop, admin, ranks, help,
   blackjack, mines, setupverify, tickets, setchest, setupboostergiveaway, startboostergiveaway,
-  createcode, activecodes, redeem, bjduel,
+  createcode, activecodes, redeem, bjduel, gift,
 ];
 for (const cmd of allCommands) {
   commands.set(cmd.data.name, cmd as Command);
