@@ -7,6 +7,7 @@ import {
   discordGiveaways,
   discordShopItems,
   discordTransactions,
+  discordCodes,
 } from "@workspace/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { getRankForCredits, xpForLevel } from "./constants.js";
@@ -239,4 +240,63 @@ export async function getShopItems(guildId: string) {
 export async function createShopItem(data: typeof discordShopItems.$inferInsert) {
   const [created] = await db.insert(discordShopItems).values(data).returning();
   return created;
+}
+
+// ── Gem Codes ─────────────────────────────────────────────────────────────────
+export async function createCode(
+  guildId: string,
+  code: string,
+  reward: number,
+  maxUses: number,
+  createdBy: string
+) {
+  const existing = await db
+    .select()
+    .from(discordCodes)
+    .where(and(eq(discordCodes.guildId, guildId), eq(discordCodes.code, code)))
+    .limit(1);
+  if (existing.length > 0) return null; // duplicate
+
+  const [created] = await db
+    .insert(discordCodes)
+    .values({ guildId, code, reward, maxUses, createdBy, uses: 0, usedBy: [], isActive: true })
+    .returning();
+  return created;
+}
+
+export async function getActiveCodes(guildId: string) {
+  return db
+    .select()
+    .from(discordCodes)
+    .where(and(eq(discordCodes.guildId, guildId), eq(discordCodes.isActive, true)))
+    .orderBy(desc(discordCodes.createdAt));
+}
+
+export async function redeemCode(
+  guildId: string,
+  code: string,
+  userId: string
+): Promise<number | "not_found" | "already_used" | "max_uses"> {
+  const [row] = await db
+    .select()
+    .from(discordCodes)
+    .where(and(eq(discordCodes.guildId, guildId), eq(discordCodes.code, code), eq(discordCodes.isActive, true)))
+    .limit(1);
+
+  if (!row) return "not_found";
+
+  const usedBy = (row.usedBy as string[]) ?? [];
+  if (usedBy.includes(userId)) return "already_used";
+  if (row.uses >= row.maxUses) return "max_uses";
+
+  const newUses  = row.uses + 1;
+  const newUsedBy = [...usedBy, userId];
+  const expired  = newUses >= row.maxUses;
+
+  await db
+    .update(discordCodes)
+    .set({ uses: newUses, usedBy: newUsedBy, isActive: !expired })
+    .where(eq(discordCodes.id, row.id));
+
+  return row.reward;
 }

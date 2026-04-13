@@ -24,11 +24,15 @@ import * as tickets from "./commands/tickets.js";
 import * as setchest from "./commands/setchest.js";
 import * as setupboostergiveaway from "./commands/setupboostergiveaway.js";
 import * as startboostergiveaway from "./commands/startboostergiveaway.js";
+import * as createcode from "./commands/createcode.js";
+import * as activecodes from "./commands/activecodes.js";
+import * as redeem from "./commands/redeem.js";
 
 const allCommands = [
   rank, leaderboard, chest, daily, weekly, work, crime, balance,
   bank, transfer, gamble, giveaway, shop, admin, ranks, help,
   blackjack, mines, setupverify, tickets, setchest, setupboostergiveaway, startboostergiveaway,
+  createcode, activecodes, redeem,
 ];
 const commandsJSON = allCommands.map((cmd) => cmd.data.toJSON());
 

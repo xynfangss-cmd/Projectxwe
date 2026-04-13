@@ -118,6 +118,19 @@ export const discordTransactions = pgTable("discord_transactions", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const discordCodes = pgTable("discord_codes", {
+  id: serial("id").primaryKey(),
+  guildId: text("guild_id").notNull(),
+  code: text("code").notNull(),
+  reward: bigint("reward", { mode: "number" }).notNull(),
+  maxUses: integer("max_uses").notNull(),
+  uses: integer("uses").notNull().default(0),
+  usedBy: jsonb("used_by").$type<string[]>().default([]),
+  createdBy: text("created_by").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const discordRoleRewards = pgTable("discord_role_rewards", {
   id: serial("id").primaryKey(),
   guildId: text("guild_id").notNull(),
