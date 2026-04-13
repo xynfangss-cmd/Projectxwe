@@ -97,6 +97,28 @@ export async function getLeaderboard(guildId: string, limit = 10) {
     .limit(limit);
 }
 
+export async function getLeaderboardByGems(guildId: string, limit = 10) {
+  return db
+    .select()
+    .from(discordUsers)
+    .where(eq(discordUsers.guildId, guildId))
+    .orderBy(desc(discordUsers.credits))
+    .limit(limit);
+}
+
+export async function getUserGemsRank(userId: string, guildId: string): Promise<number> {
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(discordUsers)
+    .where(
+      and(
+        eq(discordUsers.guildId, guildId),
+        sql`credits > (SELECT credits FROM discord_users WHERE user_id = ${userId} AND guild_id = ${guildId})`
+      )
+    );
+  return (result[0]?.count ?? 0) + 1;
+}
+
 export async function getLeaderboardByXp(guildId: string, limit = 10) {
   return db
     .select()
