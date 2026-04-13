@@ -10,10 +10,10 @@ import {
   CREDITS_PER_MESSAGE_MAX,
   MESSAGE_COOLDOWN_MS,
   getRankForCredits,
+  RANKS,
   formatNumber,
   xpForLevel,
 } from "../utils/constants.js";
-import { checkRankChange } from "../utils/rankRoles.js";
 
 const cooldowns = new Map<string, number>();
 
@@ -29,7 +29,10 @@ export async function handleMessage(client: Client, message: Message) {
 
   const settings = await getOrCreateGuildSettings(message.guild.id);
 
+  // Check no-XP channels
   if (settings.noXpChannels?.includes(message.channel.id)) return;
+
+  // Check no-XP roles
   if (settings.noXpRoles && settings.noXpRoles.length > 0) {
     const member = message.member;
     if (member && member.roles.cache.some((r) => settings.noXpRoles!.includes(r.id))) return;
@@ -40,7 +43,8 @@ export async function handleMessage(client: Client, message: Message) {
       settings.creditsMultiplier
   );
 
-  const prevUser  = await getOrCreateUser(message.author.id, message.guild.id, message.author.username);
+  const prevUser = await getOrCreateUser(message.author.id, message.guild.id, message.author.username);
+  const prevRank = getRankForCredits(prevUser.totalCreditsEarned);
   const prevLevel = prevUser.level;
 
   const updatedUser = await addCredits(message.author.id, message.guild.id, creditsEarned);
@@ -49,19 +53,30 @@ export async function handleMessage(client: Client, message: Message) {
     lastMessageAt: new Date(),
   });
 
-  const member = message.member ??
-    await message.guild.members.fetch(message.author.id).catch(() => null);
+  const newRank = getRankForCredits(updatedUser.totalCreditsEarned);
 
-  // Rank change (promotion or demotion) — uses current balance
-  if (member) {
-    const notifyChannelId = settings.creditsChannelId ?? settings.levelUpChannelId ?? null;
-    await checkRankChange(
-      message.guild,
-      member,
-      prevUser.credits,
-      updatedUser.credits,
-      notifyChannelId,
-    ).catch(() => {});
+  // Rank-up notification
+  if (newRank.name !== prevRank.name) {
+    const rankEmbed = new EmbedBuilder()
+      .setColor(newRank.color as number)
+      .setTitle(`${newRank.emoji} Rank Up!`)
+      .setDescription(`<@${message.author.id}> has ranked up to **${newRank.name}**!`)
+      .addFields(
+        { name: "New Rank", value: `${newRank.emoji} ${newRank.name}`, inline: true },
+        { name: "Total Credits", value: formatNumber(updatedUser.totalCreditsEarned), inline: true }
+      )
+      .setThumbnail(message.author.displayAvatarURL({ size: 64 }))
+      .setTimestamp();
+
+    const channelId = settings.creditsChannelId ?? settings.levelUpChannelId;
+    if (channelId) {
+      const ch = message.guild.channels.cache.get(channelId) as TextChannel | undefined;
+      await ch?.send({ embeds: [rankEmbed] }).catch(() => {});
+    } else {
+      if ("send" in message.channel) {
+        await (message.channel as TextChannel).send({ embeds: [rankEmbed] }).catch(() => {});
+      }
+    }
   }
 
   // Level-up notification
@@ -71,8 +86,8 @@ export async function handleMessage(client: Client, message: Message) {
       .setTitle("⭐ Level Up!")
       .setDescription(`<@${message.author.id}> reached **Level ${updatedUser.level}**!`)
       .addFields(
-        { name: "Level",    value: `${prevLevel} → ${updatedUser.level}`, inline: true },
-        { name: "Total XP", value: formatNumber(updatedUser.xp),           inline: true }
+        { name: "Level", value: `${prevLevel} → ${updatedUser.level}`, inline: true },
+        { name: "Total XP", value: formatNumber(updatedUser.xp), inline: true }
       )
       .setTimestamp();
 

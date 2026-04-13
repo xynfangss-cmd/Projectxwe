@@ -71,11 +71,6 @@ import * as bjduel from "./commands/bjduel.js";
 import * as gift from "./commands/gift.js";
 import { startBoosterGiveaway, activeRounds, handleBoosterEntry } from "./systems/boosterGiveaway.js";
 import { startAutoGiveaway, handleAutoGawEntry } from "./systems/autoGiveaway.js";
-import { syncMemberRankRole } from "./utils/rankRoles.js";
-import { db } from "@workspace/db";
-import { discordUsers } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
-import { getRankForCredits } from "./utils/constants.js";
 
 type Command = {
   data: { name: string; toJSON: () => unknown };
@@ -125,7 +120,6 @@ client.once(Events.ClientReady, async (c) => {
   startInviteTracker(client);
   startBoosterGiveaway(client);
   startAutoGiveaway(client);
-  startRankScanner(client);
 
   // Cache invites for all guilds
   for (const [, guild] of c.guilds.cache) {
@@ -204,42 +198,6 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
     });
   }
 });
-
-// ── Periodic rank scanner — syncs Discord roles with DB rank every 10 minutes ─
-function startRankScanner(client: Client): void {
-  const scan = async () => {
-    for (const [, guild] of client.guilds.cache) {
-      try {
-        const users = await db.select().from(discordUsers).where(eq(discordUsers.guildId, guild.id));
-        for (const user of users) {
-          const expected = getRankForCredits(user.credits);
-          if (user.rank === expected.name) continue;
-
-          // Update DB rank
-          await db
-            .update(discordUsers)
-            .set({ rank: expected.name })
-            .where(eq(discordUsers.id, user.id))
-            .catch(() => {});
-
-          // Sync Discord role
-          const member =
-            guild.members.cache.get(user.userId) ??
-            (await guild.members.fetch(user.userId).catch(() => null));
-          if (member) {
-            await syncMemberRankRole(guild, member, expected.name).catch(() => {});
-          }
-        }
-      } catch (_) {}
-    }
-  };
-
-  // First scan after 30s, then every 10 minutes
-  setTimeout(() => {
-    scan();
-    setInterval(scan, 10 * 60 * 1000);
-  }, 30_000);
-}
 
 async function handleButton(interaction: ButtonInteraction): Promise<void> {
   const { customId, user, guildId } = interaction;
