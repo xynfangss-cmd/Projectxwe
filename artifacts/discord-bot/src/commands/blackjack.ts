@@ -9,7 +9,7 @@ import {
   MessageFlags,
 } from "discord.js";
 import { getOrCreateUser, updateUser } from "../utils/db.js";
-import { formatNumber, parseAmount } from "../utils/constants.js";
+import { formatNumber } from "../utils/constants.js";
 
 // ── Card helpers ──────────────────────────────────────────────────────────────
 // Card index 0-51: suitIndex*13 + faceIndex
@@ -235,19 +235,14 @@ async function applyPayout(
 export const data = new SlashCommandBuilder()
   .setName("blackjack")
   .setDescription("Play blackjack with a real shuffled deck — Hit, Stand, or Double Down!")
-  .addStringOption((opt) =>
-    opt.setName("bet").setDescription("Amount of gems to bet (e.g. 1k, 5m, 100)").setRequired(true)
+  .addIntegerOption((opt) =>
+    opt.setName("bet").setDescription("Amount of gems to bet").setRequired(true).setMinValue(100)
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const userId  = interaction.user.id;
   const guildId = interaction.guildId!;
-  const betRaw  = interaction.options.getString("bet", true);
-  const bet     = parseAmount(betRaw);
-  if (!bet || bet < 100) {
-    await interaction.reply({ content: "❌ Invalid bet. Minimum is 100 gems. Use e.g. `100`, `1k`, `5m`.", flags: 64 });
-    return;
-  }
+  const bet     = interaction.options.getInteger("bet", true);
 
   const dbUser = await getOrCreateUser(userId, guildId, interaction.user.username);
   if (dbUser.credits < bet) {

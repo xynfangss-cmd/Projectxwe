@@ -1,13 +1,13 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from "discord.js";
 import { getOrCreateUser, updateUser, logTransaction } from "../utils/db.js";
-import { formatNumber, parseAmount } from "../utils/constants.js";
+import { formatNumber } from "../utils/constants.js";
 
 export const data = new SlashCommandBuilder()
   .setName("transfer")
   .setDescription("Transfer gems to another user")
   .addUserOption((opt) => opt.setName("user").setDescription("User to transfer to").setRequired(true))
-  .addStringOption((opt) =>
-    opt.setName("amount").setDescription("Amount of gems to transfer (e.g. 1k, 5m, 100)").setRequired(true)
+  .addIntegerOption((opt) =>
+    opt.setName("amount").setDescription("Amount of gems to transfer").setRequired(true).setMinValue(1)
   )
   .addStringOption((opt) =>
     opt.setName("note").setDescription("Optional note").setRequired(false)
@@ -16,12 +16,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply();
   const target = interaction.options.getUser("user", true);
-  const amountRaw = interaction.options.getString("amount", true);
-  const amount    = parseAmount(amountRaw);
-  if (!amount || amount < 1) {
-    await interaction.editReply({ content: "❌ Invalid amount. Use e.g. `500`, `10k`, `5m`." });
-    return;
-  }
+  const amount = interaction.options.getInteger("amount", true);
   const note = interaction.options.getString("note") ?? undefined;
   const guildId = interaction.guildId!;
   const fromId = interaction.user.id;

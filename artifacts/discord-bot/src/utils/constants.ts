@@ -83,29 +83,6 @@ export function progressBar(current: number, max: number, length = 12): string {
   return "█".repeat(filled) + "░".repeat(empty);
 }
 
-/**
- * Parse a gem amount string with optional suffix abbreviations.
- * e.g. "1k" → 1000, "1.5m" → 1500000, "1b" → 1000000000
- * Returns null if the string is not a valid amount.
- */
-export function parseAmount(input: string): number | null {
-  const str = input.trim().toLowerCase().replace(/,/g, "");
-  const match = str.match(/^(\d+(?:\.\d+)?)\s*([kmb]?)$/);
-  if (!match) return null;
-
-  const num = parseFloat(match[1]);
-  if (isNaN(num) || num <= 0) return null;
-
-  const suffix = match[2];
-  let result: number;
-  if      (suffix === "k") result = num * 1_000;
-  else if (suffix === "m") result = num * 1_000_000;
-  else if (suffix === "b") result = num * 1_000_000_000;
-  else                     result = num;
-
-  return Math.floor(result);
-}
-
 export function formatNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
