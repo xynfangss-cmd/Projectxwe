@@ -67,6 +67,7 @@ import * as startboostergiveaway from "./commands/startboostergiveaway.js";
 import * as createcode from "./commands/createcode.js";
 import * as activecodes from "./commands/activecodes.js";
 import * as redeem from "./commands/redeem.js";
+import * as bjduel from "./commands/bjduel.js";
 import { startBoosterGiveaway, activeRounds, handleBoosterEntry } from "./systems/boosterGiveaway.js";
 
 type Command = {
@@ -79,7 +80,7 @@ const allCommands = [
   rank, leaderboard, chest, daily, weekly, work, crime, balance,
   bank, transfer, gamble, giveaway, shop, admin, ranks, help,
   blackjack, mines, setupverify, tickets, setchest, setupboostergiveaway, startboostergiveaway,
-  createcode, activecodes, redeem,
+  createcode, activecodes, redeem, bjduel,
 ];
 for (const cmd of allCommands) {
   commands.set(cmd.data.name, cmd as Command);
@@ -198,6 +199,12 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
   // ── Route blackjack buttons ──────────────────────────────────────────────
   if (customId.startsWith("bj_")) {
     await blackjack.handleButton(interaction);
+    return;
+  }
+
+  // ── Route blackjack duel buttons ─────────────────────────────────────────
+  if (customId.startsWith("bjduel_")) {
+    await bjduel.handleDuelButton(interaction);
     return;
   }
 
