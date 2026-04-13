@@ -16,6 +16,8 @@ import {
   MessageFlags,
   GuildMember,
   Role,
+  REST,
+  Routes,
 } from "discord.js";
 import { handleMessage } from "./systems/messageXP.js";
 import { startGiveawayManager } from "./systems/giveawayManager.js";
@@ -609,12 +611,28 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
   }
 }
 
-const token = process.env.DISCORD_TOKEN;
-if (!token) {
-  throw new Error("DISCORD_TOKEN environment variable is not set!");
+const token    = process.env.DISCORD_TOKEN;
+const clientId = process.env.DISCORD_CLIENT_ID;
+
+if (!token || !clientId) {
+  throw new Error("DISCORD_TOKEN and DISCORD_CLIENT_ID must be set!");
 }
 
-client.login(token).catch((err) => {
-  console.error("Failed to log in:", err);
-  process.exit(1);
+// Auto-register slash commands on every startup so production always stays in sync
+async function deployCommands(): Promise<void> {
+  const commandsJSON = allCommands.map((cmd) => cmd.data.toJSON());
+  const rest = new REST({ version: "10" }).setToken(token!);
+  try {
+    const data = await rest.put(Routes.applicationCommands(clientId!), { body: commandsJSON }) as unknown[];
+    console.log(`✅ Registered ${(data as []).length} slash commands.`);
+  } catch (err) {
+    console.error("⚠️ Failed to register commands (non-fatal):", (err as Error).message);
+  }
+}
+
+deployCommands().then(() => {
+  client.login(token).catch((err) => {
+    console.error("Failed to log in:", err);
+    process.exit(1);
+  });
 });
