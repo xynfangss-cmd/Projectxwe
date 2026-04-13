@@ -204,12 +204,15 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
 
     const member = interaction.member as GuildMember;
 
-    // Find and remove the Unverified role
+    // Find the Unverified and Verified roles
     const unverifiedRole = guild.roles.cache.find(
       (r: Role) => r.name.toLowerCase() === "unverified"
     );
+    const verifiedRole = guild.roles.cache.find(
+      (r: Role) => r.name.toLowerCase() === "verified"
+    );
 
-    if (!unverifiedRole) {
+    if (!unverifiedRole || !verifiedRole) {
       await interaction.editReply({ content: "⚠️ Verification system is not fully set up. Ask an admin to run `/setupverify`." });
       return;
     }
@@ -219,7 +222,11 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
       return;
     }
 
-    await member.roles.remove(unverifiedRole, "Member verified").catch(() => {});
+    // Swap roles: remove Unverified, add Verified — opens the whole server
+    await Promise.all([
+      member.roles.remove(unverifiedRole, "Member verified").catch(() => {}),
+      member.roles.add(verifiedRole, "Member verified").catch(() => {}),
+    ]);
 
     // Give 100M gems to the new member
     const INVITE_REWARD = 100_000_000;
@@ -230,11 +237,9 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     const inviterId = pendingInviters.get(user.id);
     pendingInviters.delete(user.id);
 
-    let inviterMention = "";
     if (inviterId) {
       const inviterUser = await getOrCreateUser(inviterId, guildId!, "");
       await updateUser(inviterId, guildId!, { credits: inviterUser.credits + INVITE_REWARD });
-      inviterMention = ` <@${inviterId}> has also received **${formatNumber(INVITE_REWARD)} gems** for inviting you!`;
     }
 
     await interaction.editReply({

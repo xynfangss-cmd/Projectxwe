@@ -14,7 +14,7 @@ import {
 
 export const data = new SlashCommandBuilder()
   .setName("setupverify")
-  .setDescription("Set up the verification system — creates the Unverified role and verify channel")
+  .setDescription("Set up the verification system — creates Unverified/Verified roles and #verify channel")
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -40,7 +40,24 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     steps.push("✅ Found existing **Unverified** role");
   }
 
-  // ── 2. Deny Unverified from viewing all existing text channels ────────────
+  // ── 2. Create or find the "Verified" role ─────────────────────────────────
+  let verifiedRole: Role | null = guild.roles.cache.find(
+    (r) => r.name.toLowerCase() === "verified"
+  ) ?? null;
+
+  if (!verifiedRole) {
+    verifiedRole = await guild.roles.create({
+      name: "Verified",
+      color: 0x57f287,
+      permissions: [],
+      reason: "GEM Bot verification setup",
+    });
+    steps.push("✅ Created **Verified** role");
+  } else {
+    steps.push("✅ Found existing **Verified** role");
+  }
+
+  // ── 3. Set channel permissions — Verified can see all, Unverified cannot ──
   let lockedCount = 0;
   for (const [, channel] of guild.channels.cache) {
     if (
@@ -51,15 +68,20 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     if ((channel as TextChannel).name === "verify") continue;
 
     try {
+      // Allow Verified to see the channel
+      await channel.permissionOverwrites.edit(verifiedRole, {
+        ViewChannel: true,
+      });
+      // Block Unverified from seeing the channel
       await channel.permissionOverwrites.edit(unverifiedRole, {
         ViewChannel: false,
       });
       lockedCount++;
-    } catch { /* skip channels bot can't edit */ }
+    } catch { /* skip channels the bot can't edit */ }
   }
-  steps.push(`✅ Locked **${lockedCount}** channel(s) from Unverified`);
+  steps.push(`✅ Updated permissions on **${lockedCount}** channel(s)`);
 
-  // ── 3. Create or find the #verify channel ────────────────────────────────
+  // ── 4. Create or find the #verify channel ────────────────────────────────
   let verifyChannel = guild.channels.cache.find(
     (c) => c.type === ChannelType.GuildText && c.name === "verify"
   ) as TextChannel | undefined;
@@ -70,31 +92,37 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       type: ChannelType.GuildText,
       topic: "Click the button below to verify and gain access to the server.",
       permissionOverwrites: [
-        // Everyone can't see it by default
+        // @everyone cannot see it
         { id: guild.roles.everyone, type: OverwriteType.Role, deny: [PermissionFlagsBits.ViewChannel] },
-        // Unverified CAN see and read it (but not send messages except via bot)
+        // Unverified CAN see and read it (no sending)
         {
           id: unverifiedRole,
           type: OverwriteType.Role,
           allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory],
           deny: [PermissionFlagsBits.SendMessages],
         },
+        // Verified cannot see #verify (they're done)
+        {
+          id: verifiedRole,
+          type: OverwriteType.Role,
+          deny: [PermissionFlagsBits.ViewChannel],
+        },
       ],
       reason: "GEM Bot verification channel",
     });
     steps.push("✅ Created **#verify** channel");
   } else {
-    // Update its permissions
     await verifyChannel.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false });
     await verifyChannel.permissionOverwrites.edit(unverifiedRole, {
       ViewChannel: true,
       ReadMessageHistory: true,
       SendMessages: false,
     });
+    await verifyChannel.permissionOverwrites.edit(verifiedRole, { ViewChannel: false });
     steps.push("✅ Updated **#verify** channel permissions");
   }
 
-  // ── 4. Post the verification embed ────────────────────────────────────────
+  // ── 5. Post the verification embed ────────────────────────────────────────
   const verifyEmbed = new EmbedBuilder()
     .setColor(0x57f287)
     .setTitle("✅ Welcome — Please Verify")
@@ -130,10 +158,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       "",
       steps.join("\n"),
       "",
-      `**Role to assign on join:** <@&${unverifiedRole.id}>`,
+      `**Unverified role:** <@&${unverifiedRole.id}> — assigned on join, can only see #verify`,
+      `**Verified role:** <@&${verifiedRole.id}> — granted on verify, can see all channels`,
       `**Verify channel:** <#${verifyChannel.id}>`,
       "",
-      "New members will automatically receive the **Unverified** role when they join and can only see **#verify** until they click the button.",
+      "New members will automatically receive **Unverified** when they join and unlock the server once they click Verify.",
     ].join("\n"),
   });
 }
