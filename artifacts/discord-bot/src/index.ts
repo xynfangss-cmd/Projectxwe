@@ -62,6 +62,8 @@ import * as mines from "./commands/mines.js";
 import * as setupverify from "./commands/setupverify.js";
 import * as tickets from "./commands/tickets.js";
 import * as setchest from "./commands/setchest.js";
+import * as setupboostergiveaway from "./commands/setupboostergiveaway.js";
+import { startBoosterGiveaway, activeRounds, handleBoosterEntry } from "./systems/boosterGiveaway.js";
 
 type Command = {
   data: { name: string; toJSON: () => unknown };
@@ -72,7 +74,7 @@ const commands = new Collection<string, Command>();
 const allCommands = [
   rank, leaderboard, chest, daily, weekly, work, crime, balance,
   bank, transfer, gamble, giveaway, shop, admin, ranks, help,
-  blackjack, mines, setupverify, tickets, setchest,
+  blackjack, mines, setupverify, tickets, setchest, setupboostergiveaway,
 ];
 for (const cmd of allCommands) {
   commands.set(cmd.data.name, cmd as Command);
@@ -108,6 +110,7 @@ client.once(Events.ClientReady, async (c) => {
 
   startGiveawayManager(client);
   startInviteTracker(client);
+  startBoosterGiveaway(client);
 
   // Cache invites for all guilds
   for (const [, guild] of c.guilds.cache) {
@@ -358,6 +361,15 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     await interaction.editReply({
       content: `✅ Your **${info.label}** ticket has been opened: <#${ticketChannel.id}>`,
     });
+    return;
+  }
+
+  // ── Booster giveaway enter button ────────────────────────────────────────
+  if (customId.startsWith("bgaw_enter_")) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const roundId = customId.replace("bgaw_enter_", "");
+    const result  = await handleBoosterEntry(client, roundId, user.id, guildId!);
+    await interaction.editReply({ content: result });
     return;
   }
 

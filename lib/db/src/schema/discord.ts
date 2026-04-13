@@ -54,6 +54,7 @@ export const discordGuildSettings = pgTable("discord_guild_settings", {
   levelUpChannelId: text("level_up_channel_id"),
   giveawayChannelId: text("giveaway_channel_id"),
   loggingChannelId: text("logging_channel_id"),
+  boosterGiveawayChannelId: text("booster_giveaway_channel_id"),
   xpMultiplier: real("xp_multiplier").notNull().default(1.0),
   creditsMultiplier: real("credits_multiplier").notNull().default(1.0),
   noXpRoles: text("no_xp_roles").array().default([]),
