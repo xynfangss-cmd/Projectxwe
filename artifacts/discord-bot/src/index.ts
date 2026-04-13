@@ -14,9 +14,17 @@ import {
   ButtonStyle,
   TextChannel,
   MessageFlags,
+  GuildMember,
+  Role,
 } from "discord.js";
 import { handleMessage } from "./systems/messageXP.js";
 import { startGiveawayManager } from "./systems/giveawayManager.js";
+import {
+  startInviteTracker,
+  cacheGuildInvites,
+  detectInviter,
+  pendingInviters,
+} from "./systems/inviteTracker.js";
 import {
   getOrCreateUser,
   updateUser,
@@ -45,6 +53,7 @@ import * as ranks from "./commands/ranks.js";
 import * as help from "./commands/help.js";
 import * as blackjack from "./commands/blackjack.js";
 import * as mines from "./commands/mines.js";
+import * as setupverify from "./commands/setupverify.js";
 
 type Command = {
   data: { name: string; toJSON: () => unknown };
@@ -55,7 +64,7 @@ const commands = new Collection<string, Command>();
 const allCommands = [
   rank, leaderboard, chest, daily, weekly, work, crime, balance,
   bank, transfer, gamble, giveaway, shop, admin, ranks, help,
-  blackjack, mines,
+  blackjack, mines, setupverify,
 ];
 for (const cmd of allCommands) {
   commands.set(cmd.data.name, cmd as Command);
@@ -67,6 +76,7 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildInvites,
   ],
 });
 
@@ -89,6 +99,48 @@ client.once(Events.ClientReady, async (c) => {
   });
 
   startGiveawayManager(client);
+  startInviteTracker(client);
+
+  // Cache invites for all guilds
+  for (const [, guild] of c.guilds.cache) {
+    await cacheGuildInvites(guild);
+  }
+  console.log("📋 Invite cache loaded");
+});
+
+// ── New member joins ──────────────────────────────────────────────────────────
+client.on(Events.GuildMemberAdd, async (member: GuildMember) => {
+  try {
+    const guild = member.guild;
+
+    // Detect which invite was used
+    const inviterId = await detectInviter(guild);
+    if (inviterId && inviterId !== member.id) {
+      pendingInviters.set(member.id, inviterId);
+      console.log(`📨 ${member.user.username} was invited by ${inviterId}`);
+    }
+
+    // Find the Unverified role and assign it
+    const unverifiedRole = guild.roles.cache.find(
+      (r: Role) => r.name.toLowerCase() === "unverified"
+    );
+    if (unverifiedRole) {
+      await member.roles.add(unverifiedRole, "New member — pending verification").catch(() => {});
+    }
+
+    // Send a welcome prompt in the #verify channel
+    const verifyChannel = guild.channels.cache.find(
+      (c) => c.type === ChannelType.GuildText && c.name === "verify"
+    ) as TextChannel | undefined;
+
+    if (verifyChannel) {
+      await verifyChannel.send({
+        content: `👋 Welcome ${member}! Click **Verify** above to gain access to the server.`,
+      }).catch(() => {});
+    }
+  } catch (err) {
+    console.error("[GuildMemberAdd Error]", err);
+  }
 });
 
 client.on(Events.MessageCreate, async (message) => {
@@ -136,6 +188,61 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
   // ── Route mines buttons ──────────────────────────────────────────────────
   if (customId.startsWith("mines_")) {
     await mines.handleButton(interaction);
+    return;
+  }
+
+  // ── Verify button ─────────────────────────────────────────────────────────
+  if (customId === "verify_member") {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const guild = interaction.guild;
+    if (!guild) {
+      await interaction.editReply({ content: "This can only be used in a server." });
+      return;
+    }
+
+    const member = interaction.member as GuildMember;
+
+    // Find and remove the Unverified role
+    const unverifiedRole = guild.roles.cache.find(
+      (r: Role) => r.name.toLowerCase() === "unverified"
+    );
+
+    if (!unverifiedRole) {
+      await interaction.editReply({ content: "⚠️ Verification system is not fully set up. Ask an admin to run `/setupverify`." });
+      return;
+    }
+
+    if (!member.roles.cache.has(unverifiedRole.id)) {
+      await interaction.editReply({ content: "✅ You are already verified!" });
+      return;
+    }
+
+    await member.roles.remove(unverifiedRole, "Member verified").catch(() => {});
+
+    // Give 100M gems to the new member
+    const INVITE_REWARD = 100_000_000;
+    const dbUser = await getOrCreateUser(user.id, guildId!, user.username);
+    await updateUser(user.id, guildId!, { credits: dbUser.credits + INVITE_REWARD });
+
+    // Give 100M gems to the inviter (if tracked)
+    const inviterId = pendingInviters.get(user.id);
+    pendingInviters.delete(user.id);
+
+    let inviterMention = "";
+    if (inviterId) {
+      const inviterUser = await getOrCreateUser(inviterId, guildId!, "");
+      await updateUser(inviterId, guildId!, { credits: inviterUser.credits + INVITE_REWARD });
+      inviterMention = ` <@${inviterId}> has also received **${formatNumber(INVITE_REWARD)} gems** for inviting you!`;
+    }
+
+    await interaction.editReply({
+      content: [
+        `✅ **You're now verified!** Welcome to the server!`,
+        `💎 You've received **${formatNumber(INVITE_REWARD)} gems** as a welcome gift!`,
+        inviterId ? `🎉 <@${inviterId}> also received **${formatNumber(INVITE_REWARD)} gems** for inviting you!` : "",
+      ].filter(Boolean).join("\n"),
+    });
     return;
   }
 

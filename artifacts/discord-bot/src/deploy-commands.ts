@@ -19,11 +19,12 @@ import * as ranks from "./commands/ranks.js";
 import * as help from "./commands/help.js";
 import * as blackjack from "./commands/blackjack.js";
 import * as mines from "./commands/mines.js";
+import * as setupverify from "./commands/setupverify.js";
 
 const allCommands = [
   rank, leaderboard, chest, daily, weekly, work, crime, balance,
   bank, transfer, gamble, giveaway, shop, admin, ranks, help,
-  blackjack, mines,
+  blackjack, mines, setupverify,
 ];
 const commandsJSON = allCommands.map((cmd) => cmd.data.toJSON());
 
