@@ -174,7 +174,7 @@ client.on(Events.MessageCreate, async (message) => {
 
 client.on(Events.InteractionCreate, async (interaction: Interaction) => {
   // Drop stale interactions replayed after a bot restart (already past Discord's 3s window)
-  if ("createdTimestamp" in interaction && Date.now() - (interaction as any).createdTimestamp > 2500) return;
+  if ("createdTimestamp" in interaction && Date.now() - (interaction as any).createdTimestamp > 2900) return;
 
   // Handle slash commands
   if (interaction.isChatInputCommand()) {
@@ -225,7 +225,11 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
 
   // ── Verify button ─────────────────────────────────────────────────────────
   if (customId === "verify_member") {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    try {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    } catch {
+      return; // stale or already-responded interaction — drop silently
+    }
 
     const guild = interaction.guild;
     if (!guild) {
@@ -248,7 +252,8 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
       return;
     }
 
-    if (!member.roles.cache.has(unverifiedRole.id)) {
+    // Already has the verified role
+    if (member.roles.cache.has(verifiedRole.id)) {
       await interaction.editReply({ content: "✅ You are already verified!" });
       return;
     }

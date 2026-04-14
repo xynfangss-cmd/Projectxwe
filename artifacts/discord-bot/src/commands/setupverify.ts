@@ -10,6 +10,7 @@ import {
   OverwriteType,
   TextChannel,
   Role,
+  MessageFlags,
 } from "discord.js";
 
 export const data = new SlashCommandBuilder()
@@ -18,7 +19,11 @@ export const data = new SlashCommandBuilder()
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  try {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  } catch {
+    return; // interaction already expired — drop silently
+  }
 
   const guild = interaction.guild!;
   const steps: string[] = [];
