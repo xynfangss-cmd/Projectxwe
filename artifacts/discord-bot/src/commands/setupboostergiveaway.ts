@@ -25,7 +25,7 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  try { await interaction.deferReply({ flags: MessageFlags.Ephemeral }); } catch { return; }
 
   const channel = interaction.options.getChannel("channel", true) as TextChannel;
   const guildId = interaction.guildId!;

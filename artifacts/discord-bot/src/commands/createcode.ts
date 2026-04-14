@@ -27,7 +27,7 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  try { await interaction.deferReply({ flags: MessageFlags.Ephemeral }); } catch { return; }
 
   const gems    = interaction.options.getInteger("gems", true);
   const uses    = interaction.options.getInteger("uses", true);

@@ -14,7 +14,7 @@ export const data = new SlashCommandBuilder()
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  try { await interaction.deferReply({ flags: MessageFlags.Ephemeral }); } catch { return; }
 
   const guild   = interaction.guild!;
   const guildId = guild.id;

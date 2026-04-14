@@ -211,6 +211,7 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
   // Handle button interactions
   if (interaction.isButton()) {
     await handleButton(interaction).catch((err) => {
+      if (err?.code === 10062) return; // Unknown interaction — stale, drop silently
       console.error("[Button Error]", err?.message ?? err);
     });
   }
@@ -314,7 +315,7 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     customId === "ticket_scam_report" ||
     customId === "ticket_general_help"
   ) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    try { await interaction.deferReply({ flags: MessageFlags.Ephemeral }); } catch { return; }
 
     const guild = interaction.guild;
     if (!guild) {
@@ -412,7 +413,7 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
 
   // ── Booster giveaway enter button ────────────────────────────────────────
   if (customId.startsWith("bgaw_enter_")) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    try { await interaction.deferReply({ flags: MessageFlags.Ephemeral }); } catch { return; }
     const roundId = customId.replace("bgaw_enter_", "");
     const result  = await handleBoosterEntry(client, roundId, user.id, guildId!);
     await interaction.editReply({ content: result });
@@ -421,7 +422,7 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
 
   // ── Auto giveaway enter button ────────────────────────────────────────────
   if (customId.startsWith("autogaw_enter_")) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    try { await interaction.deferReply({ flags: MessageFlags.Ephemeral }); } catch { return; }
     const roundId = customId.replace("autogaw_enter_", "");
     const result  = await handleAutoGawEntry(roundId, user.id);
     await interaction.editReply({ content: result });
@@ -430,7 +431,7 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
 
   // ── Chest panel button ───────────────────────────────────────────────────
   if (customId === "chest_open") {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    try { await interaction.deferReply({ flags: MessageFlags.Ephemeral }); } catch { return; }
 
     const dbUser = await getOrCreateUser(user.id, guildId!, user.username);
 
@@ -489,7 +490,7 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
 
   // ── Bank: Balance button ─────────────────────────────────────────────────
   if (customId === "bank_balance") {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    try { await interaction.deferReply({ flags: MessageFlags.Ephemeral }); } catch { return; }
     const [dbUser, bankAccount] = await Promise.all([
       getOrCreateUser(user.id, guildId!, user.username),
       getOrCreateBankAccount(user.id, guildId!),
@@ -509,7 +510,7 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
 
   // ── Bank: Deposit (open ticket) button ───────────────────────────────────
   if (customId === "bank_deposit") {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    try { await interaction.deferReply({ flags: MessageFlags.Ephemeral }); } catch { return; }
     const guild = interaction.guild;
     if (!guild) {
       await interaction.editReply({ content: "This can only be used inside a server." });
@@ -600,7 +601,7 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
 
   // ── Giveaway entry buttons: giveaway_enter_<id> ──────────────────────────
   if (customId.startsWith("giveaway_enter_")) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    try { await interaction.deferReply({ flags: MessageFlags.Ephemeral }); } catch { return; }
     const id = parseInt(customId.replace("giveaway_enter_", ""));
     const gaw = await getGiveaway(id);
 

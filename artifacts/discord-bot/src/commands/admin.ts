@@ -71,10 +71,11 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!isAdmin(interaction)) {
-    await interaction.reply({ content: "You don't have permission to use admin commands.", ephemeral: true });
+    await interaction.reply({ content: "You don't have permission to use admin commands.", flags: MessageFlags.Ephemeral });
+    return;
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  try { await interaction.deferReply({ flags: MessageFlags.Ephemeral }); } catch { return; }
   const sub = interaction.options.getSubcommand();
   const guildId = interaction.guildId!;
 
