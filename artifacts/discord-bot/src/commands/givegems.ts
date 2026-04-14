@@ -2,16 +2,15 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   EmbedBuilder,
-  PermissionFlagsBits,
   MessageFlags,
 } from "discord.js";
 import { getOrCreateUser, updateUser } from "../utils/db.js";
 import { formatNumber } from "../utils/constants.js";
+import { isAdmin } from "../utils/perms.js";
 
 export const data = new SlashCommandBuilder()
   .setName("givegems")
   .setDescription("Admin: Give gems to a member (gems are created, not taken from anyone)")
-  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .addUserOption((opt) =>
     opt.setName("member").setDescription("The member to give gems to").setRequired(true)
   )
@@ -24,6 +23,11 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!isAdmin(interaction)) {
+    await interaction.reply({ content: "❌ You don't have permission to use this command.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const target  = interaction.options.getUser("member", true);

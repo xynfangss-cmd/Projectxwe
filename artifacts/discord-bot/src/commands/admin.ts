@@ -2,7 +2,7 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   EmbedBuilder,
-  PermissionFlagsBits,
+  MessageFlags,
 } from "discord.js";
 import {
   getOrCreateUser,
@@ -14,20 +14,11 @@ import {
 } from "../utils/db.js";
 import { getRankForCredits, RANKS, formatNumber } from "../utils/constants.js";
 
-const ADMIN_IDS = (process.env.ADMIN_IDS ?? "").split(",").filter(Boolean);
-
-function isAdmin(interaction: ChatInputCommandInteraction): boolean {
-  const member = interaction.member;
-  if (!member) return false;
-  if (ADMIN_IDS.includes(interaction.user.id)) return true;
-  if (typeof member.permissions === "string") return false;
-  return member.permissions.has(PermissionFlagsBits.Administrator);
-}
+import { isAdmin } from "../utils/perms.js";
 
 export const data = new SlashCommandBuilder()
   .setName("admin")
   .setDescription("Admin commands")
-  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .addSubcommand((sub) =>
     sub
       .setName("addcredits")
