@@ -644,19 +644,18 @@ if (!token || !clientId) {
   throw new Error("DISCORD_TOKEN and DISCORD_CLIENT_ID must be set!");
 }
 
-// Auto-register slash commands on every startup so production always stays in sync
-async function deployCommands(): Promise<void> {
-  const commandsJSON = allCommands.map((cmd) => cmd.data.toJSON());
+// Clear all global commands so they don't duplicate guild-specific ones
+async function clearGlobalCommands(): Promise<void> {
   const rest = new REST({ version: "10" }).setToken(token!);
   try {
-    const data = await rest.put(Routes.applicationCommands(clientId!), { body: commandsJSON }) as unknown[];
-    console.log(`✅ Registered ${(data as []).length} slash commands.`);
+    await rest.put(Routes.applicationCommands(clientId!), { body: [] });
+    console.log("🧹 Global commands cleared.");
   } catch (err) {
-    console.error("⚠️ Failed to register commands (non-fatal):", (err as Error).message);
+    console.error("⚠️ Failed to clear global commands (non-fatal):", (err as Error).message);
   }
 }
 
-deployCommands().then(() => {
+clearGlobalCommands().then(() => {
   client.login(token).catch((err) => {
     console.error("Failed to log in:", err);
     process.exit(1);
