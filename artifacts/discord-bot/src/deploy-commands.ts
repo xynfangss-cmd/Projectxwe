@@ -1,6 +1,10 @@
+/**
+ * Nuclear reset script — run with: pnpm --filter @workspace/discord-bot run deploy-commands
+ * 1. Wipes ALL global application commands (removes duplicates)
+ * 2. Registers all 31 commands directly to the guild (instant, no propagation wait)
+ */
 import { REST, Routes } from "discord.js";
 
-// Import all command data
 import * as rank from "./commands/rank.js";
 import * as leaderboard from "./commands/leaderboard.js";
 import * as chest from "./commands/chest.js";
@@ -29,35 +33,39 @@ import * as activecodes from "./commands/activecodes.js";
 import * as redeem from "./commands/redeem.js";
 import * as bjduel from "./commands/bjduel.js";
 import * as gift from "./commands/gift.js";
+import * as givegems from "./commands/givegems.js";
+import * as stocks from "./commands/stocks.js";
+import * as giverole from "./commands/giverole.js";
 
 const allCommands = [
   rank, leaderboard, chest, daily, weekly, work, crime, balance,
   bank, transfer, gamble, giveaway, shop, admin, ranks, help,
   blackjack, mines, setupverify, tickets, setchest, setupboostergiveaway, startboostergiveaway,
-  createcode, activecodes, redeem, bjduel, gift,
+  createcode, activecodes, redeem, bjduel, gift, givegems, stocks, giverole,
 ];
-const commandsJSON = allCommands.map((cmd) => cmd.data.toJSON());
 
-const token = process.env.DISCORD_TOKEN;
+const token    = process.env.DISCORD_TOKEN;
 const clientId = process.env.DISCORD_CLIENT_ID;
+const guildId  = "1435464842738925641";
 
 if (!token || !clientId) {
   throw new Error("DISCORD_TOKEN and DISCORD_CLIENT_ID must be set!");
 }
 
 const rest = new REST({ version: "10" }).setToken(token);
-const resolvedClientId: string = clientId;
+const commandsJSON = allCommands.map((cmd) => cmd.data.toJSON());
 
-async function deploy() {
-  console.log(`🚀 Deploying ${commandsJSON.length} global slash commands...`);
-  try {
-    const data = await rest.put(Routes.applicationCommands(resolvedClientId), { body: commandsJSON }) as unknown[];
-    console.log(`✅ Successfully registered ${data.length} commands globally.`);
-    console.log("Commands:", commandsJSON.map((c) => c.name).join(", "));
-  } catch (err) {
-    console.error("Failed to deploy commands:", err);
-    process.exit(1);
-  }
+async function reset() {
+  console.log("🧹 Step 1: Wiping all global application commands…");
+  await rest.put(Routes.applicationCommands(clientId!), { body: [] });
+  console.log("✅ Global commands cleared.");
+
+  console.log(`\n📡 Step 2: Registering ${commandsJSON.length} commands to guild ${guildId}…`);
+  await rest.put(Routes.applicationGuildCommands(clientId!, guildId), { body: commandsJSON });
+  console.log(`✅ Done! Commands: ${commandsJSON.map((c) => c.name).join(", ")}`);
 }
 
-deploy();
+reset().catch((err) => {
+  console.error("❌ Reset failed:", err);
+  process.exit(1);
+});
