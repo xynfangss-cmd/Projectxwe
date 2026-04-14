@@ -120,6 +120,18 @@ client.once(Events.ClientReady, async (c) => {
     status: "online",
   });
 
+  // Register commands to each guild instantly (guild commands propagate immediately)
+  const commandsJSON = allCommands.map((cmd) => cmd.data.toJSON());
+  const rest = new REST({ version: "10" }).setToken(token!);
+  for (const [guildId] of c.guilds.cache) {
+    try {
+      await rest.put(Routes.applicationGuildCommands(clientId!, guildId), { body: commandsJSON });
+      console.log(`✅ Guild commands registered for ${guildId}`);
+    } catch (err) {
+      console.error(`⚠️ Failed to register guild commands for ${guildId}:`, (err as Error).message);
+    }
+  }
+
   startGiveawayManager(client);
   startInviteTracker(client);
   startBoosterGiveaway(client);
