@@ -72,6 +72,7 @@ import * as redeem from "./commands/redeem.js";
 import * as bjduel from "./commands/bjduel.js";
 import * as gift from "./commands/gift.js";
 import * as givegems from "./commands/givegems.js";
+import * as stocks from "./commands/stocks.js";
 import { startBoosterGiveaway, activeRounds, handleBoosterEntry } from "./systems/boosterGiveaway.js";
 import { startAutoGiveaway, handleAutoGawEntry } from "./systems/autoGiveaway.js";
 
@@ -85,7 +86,7 @@ const allCommands = [
   rank, leaderboard, chest, daily, weekly, work, crime, balance,
   bank, transfer, gamble, giveaway, shop, admin, ranks, help,
   blackjack, mines, setupverify, tickets, setchest, setupboostergiveaway, startboostergiveaway,
-  createcode, activecodes, redeem, bjduel, gift, givegems,
+  createcode, activecodes, redeem, bjduel, gift, givegems, stocks,
 ];
 for (const cmd of allCommands) {
   commands.set(cmd.data.name, cmd as Command);
@@ -220,6 +221,12 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
   // ── Route mines buttons ──────────────────────────────────────────────────
   if (customId.startsWith("mines_")) {
     await mines.handleButton(interaction);
+    return;
+  }
+
+  // ── Route stocks buttons ──────────────────────────────────────────────────
+  if (customId.startsWith("stocks_")) {
+    await stocks.handleButton(interaction);
     return;
   }
 
