@@ -29,6 +29,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       .setDescription(`You're still tired from your last shift!\nRest for **${formatTime(remaining)}** before working again.`)
       .setTimestamp();
     await interaction.editReply({ embeds: [embed] });
+    return;
   }
 
   const job = WORK_JOBS[Math.floor(Math.random() * WORK_JOBS.length)];

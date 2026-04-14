@@ -57,6 +57,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       .setDescription(`You're still laying low after your last crime!\nWait **${formatTime(remaining)}** before trying again.`)
       .setTimestamp();
     await interaction.editReply({ embeds: [embed] });
+    return;
   }
 
   const outcome = weightedRandom(CRIME_OUTCOMES);
@@ -80,6 +81,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       )
       .setTimestamp();
     await interaction.editReply({ embeds: [embed] });
+    return;
   }
 
   const gain = Math.floor(Math.random() * (outcome.maxGain - outcome.minGain + 1)) + outcome.minGain;

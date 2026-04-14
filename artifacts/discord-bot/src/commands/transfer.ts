@@ -23,9 +23,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   if (target.bot) {
     await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xed4245).setTitle("❌ Cannot Transfer to Bots").setTimestamp()] });
+    return;
   }
   if (target.id === fromId) {
     await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xed4245).setTitle("❌ Cannot Transfer to Yourself").setTimestamp()] });
+    return;
   }
 
   const [fromUser, toUser] = await Promise.all([
@@ -37,6 +39,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     await interaction.editReply({
       embeds: [new EmbedBuilder().setColor(0xed4245).setTitle("❌ Insufficient Credits").setDescription(`You only have **${formatNumber(fromUser.credits)}** gems.`).setTimestamp()],
     });
+    return;
   }
 
   await Promise.all([

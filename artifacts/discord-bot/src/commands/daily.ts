@@ -25,6 +25,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       .addFields({ name: "Current Streak", value: `🔥 ${user.dailyStreak} day${user.dailyStreak !== 1 ? "s" : ""}`, inline: true })
       .setTimestamp();
     await interaction.editReply({ embeds: [embed] });
+    return;
   }
 
   // Calculate streak
