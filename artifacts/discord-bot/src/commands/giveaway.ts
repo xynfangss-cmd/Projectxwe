@@ -7,6 +7,7 @@ import {
   ButtonStyle,
   PermissionFlagsBits,
   TextChannel,
+  MessageFlags,
 } from "discord.js";
 import {
   createGiveaway,
@@ -89,6 +90,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const giveaways = await getActiveGiveaways(guildId);
     if (giveaways.length === 0) {
       await interaction.editReply({ content: "No active giveaways." });
+      return;
     }
     const lines = giveaways.map((g) => `**#${g.id}** — ${g.prize} (ends <t:${Math.floor(g.endsAt.getTime() / 1000)}:R>)`);
     await interaction.editReply({ content: lines.join("\n") });
@@ -97,8 +99,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   else if (sub === "end") {
     const id = interaction.options.getInteger("id", true);
     const giveaway = await getGiveaway(id);
-    if (!giveaway || giveaway.guildId !== guildId) await interaction.editReply({ content: "Giveaway not found." });
-    if (!giveaway.isActive) await interaction.editReply({ content: "Giveaway is already ended." });
+    if (!giveaway || giveaway.guildId !== guildId) { await interaction.editReply({ content: "Giveaway not found." }); return; }
+    if (!giveaway.isActive) { await interaction.editReply({ content: "Giveaway is already ended." }); return; }
 
     const winners = pickWinners(giveaway.entrantsJson as string[], giveaway.winnerCount);
     await updateGiveaway(id, { isActive: false, endedAt: new Date(), winnersJson: winners });
@@ -126,7 +128,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   else if (sub === "reroll") {
     const id = interaction.options.getInteger("id", true);
     const giveaway = await getGiveaway(id);
-    if (!giveaway || giveaway.guildId !== guildId) await interaction.editReply({ content: "Giveaway not found." });
+    if (!giveaway || giveaway.guildId !== guildId) { await interaction.editReply({ content: "Giveaway not found." }); return; }
 
     const entrants = giveaway.entrantsJson as string[];
     const winners = pickWinners(entrants, giveaway.winnerCount);

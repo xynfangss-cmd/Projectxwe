@@ -6,6 +6,8 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  MessageFlags,
+  TextChannel,
 } from "discord.js";
 import { CHEST_COST_XP, CHEST_REWARDS } from "../utils/constants.js";
 
@@ -49,7 +51,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       .setStyle(ButtonStyle.Primary)
   );
 
-  await interaction.channel!.send({ embeds: [embed], components: [row] });
+  await (interaction.channel as TextChannel).send({ embeds: [embed], components: [row] });
 
   await interaction.editReply({ content: "✅ Chest panel posted! Members can now click the button to open chests." });
 }

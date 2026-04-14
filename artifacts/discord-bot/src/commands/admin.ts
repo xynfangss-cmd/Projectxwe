@@ -121,7 +121,6 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const target = interaction.options.getUser("user", true);
     await updateUser(target.id, guildId, {
       credits: 0,
-      credits: 0,
       xp: 0,
       level: 1,
       rank: "Member",

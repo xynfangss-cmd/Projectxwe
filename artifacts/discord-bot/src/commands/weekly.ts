@@ -24,6 +24,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       .setDescription(`You already claimed your weekly bonus!\nCome back in **${formatTime(remaining)}**.`)
       .setTimestamp();
     await interaction.editReply({ embeds: [embed] });
+    return;
   }
 
   const base = 5_000 + Math.floor(Math.random() * 5_001);

@@ -198,11 +198,10 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
       await command.execute(interaction);
     } catch (err) {
       console.error(`Error in command ${interaction.commandName}:`, err);
-      const msg = { content: "An error occurred while running this command.", flags: MessageFlags.Ephemeral };
       if (interaction.deferred || interaction.replied) {
-        await interaction.editReply(msg).catch(() => {});
+        await interaction.editReply({ content: "An error occurred while running this command." }).catch(() => {});
       } else {
-        await interaction.reply(msg).catch(() => {});
+        await interaction.reply({ content: "An error occurred while running this command.", flags: MessageFlags.Ephemeral }).catch(() => {});
       }
     }
     return;
