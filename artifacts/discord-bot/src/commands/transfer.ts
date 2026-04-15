@@ -1,13 +1,13 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from "discord.js";
 import { getOrCreateUser, updateUser, logTransaction } from "../utils/db.js";
-import { formatNumber } from "../utils/constants.js";
+import { formatNumber, parseAmount } from "../utils/constants.js";
 
 export const data = new SlashCommandBuilder()
   .setName("transfer")
   .setDescription("Transfer gems to another user")
   .addUserOption((opt) => opt.setName("user").setDescription("User to transfer to").setRequired(true))
-  .addIntegerOption((opt) =>
-    opt.setName("amount").setDescription("Amount of gems to transfer").setRequired(true).setMinValue(1)
+  .addStringOption((opt) =>
+    opt.setName("amount").setDescription("Amount of gems to transfer (e.g. 1k, 1m, 1b, all)").setRequired(true)
   )
   .addStringOption((opt) =>
     opt.setName("note").setDescription("Optional note").setRequired(false)
@@ -16,7 +16,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply();
   const target = interaction.options.getUser("user", true);
-  const amount = interaction.options.getInteger("amount", true);
+  const amountStr = interaction.options.getString("amount", true);
   const note = interaction.options.getString("note") ?? undefined;
   const guildId = interaction.guildId!;
   const fromId = interaction.user.id;
@@ -34,6 +34,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     getOrCreateUser(fromId, guildId, interaction.user.username),
     getOrCreateUser(target.id, guildId, target.username),
   ]);
+
+  const amount = parseAmount(amountStr, fromUser.credits);
+  if (amount === null || amount < 1) {
+    await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xed4245).setTitle("❌ Invalid Amount").setDescription("Use a number like `1000`, `1k`, `1m`, `1b`, or `all`.").setTimestamp()] });
+    return;
+  }
 
   if (fromUser.credits < amount) {
     await interaction.editReply({

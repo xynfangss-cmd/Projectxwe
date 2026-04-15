@@ -83,6 +83,18 @@ export function progressBar(current: number, max: number, length = 12): string {
   return "█".repeat(filled) + "░".repeat(empty);
 }
 
+export function parseAmount(input: string, balance?: number): number | null {
+  const s = input.trim().toLowerCase().replace(/,/g, "");
+  if (s === "all" || s === "max") return balance ?? null;
+  const match = s.match(/^(\d+(?:\.\d+)?)\s*([kmbt]?)$/);
+  if (!match) return null;
+  const num = parseFloat(match[1]);
+  if (isNaN(num)) return null;
+  const suffixes: Record<string, number> = { k: 1_000, m: 1_000_000, b: 1_000_000_000, t: 1_000_000_000_000 };
+  const mult = match[2] ? (suffixes[match[2]] ?? 1) : 1;
+  return Math.floor(num * mult);
+}
+
 export function formatNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;

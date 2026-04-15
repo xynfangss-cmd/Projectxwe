@@ -9,7 +9,7 @@ import {
   MessageFlags,
 } from "discord.js";
 import { getOrCreateUser, updateUser } from "../utils/db.js";
-import { formatNumber } from "../utils/constants.js";
+import { formatNumber, parseAmount } from "../utils/constants.js";
 
 // ── Card helpers ──────────────────────────────────────────────────────────────
 // Card index 0-51: suitIndex*13 + faceIndex
@@ -235,16 +235,24 @@ async function applyPayout(
 export const data = new SlashCommandBuilder()
   .setName("blackjack")
   .setDescription("Play blackjack with a real shuffled deck — Hit, Stand, or Double Down!")
-  .addIntegerOption((opt) =>
-    opt.setName("bet").setDescription("Amount of gems to bet").setRequired(true).setMinValue(100)
+  .addStringOption((opt) =>
+    opt.setName("bet").setDescription("Amount of gems to bet (e.g. 1k, 1m, 1b, all)").setRequired(true)
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const userId  = interaction.user.id;
   const guildId = interaction.guildId!;
-  const bet     = interaction.options.getInteger("bet", true);
+  const betStr  = interaction.options.getString("bet", true);
 
   const dbUser = await getOrCreateUser(userId, guildId, interaction.user.username);
+  const bet = parseAmount(betStr, dbUser.credits);
+  if (bet === null || bet < 1) {
+    await interaction.reply({
+      content: "❌ Invalid amount. Use a number like `1000`, `1k`, `1m`, `1b`, or `all`.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
   if (dbUser.credits < bet) {
     await interaction.reply({
       content: `You only have **${formatNumber(dbUser.credits)}** gems — not enough to bet **${formatNumber(bet)}**.`,

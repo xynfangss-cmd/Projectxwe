@@ -8,6 +8,7 @@ import {
   SLOT_SYMBOLS,
   SLOT_PAYOUTS,
   formatNumber,
+  parseAmount,
 } from "../utils/constants.js";
 
 function spinSlots(): [string, string, string] {
@@ -38,16 +39,16 @@ export const data = new SlashCommandBuilder()
     sub
       .setName("slots")
       .setDescription("Spin the slot machine")
-      .addIntegerOption((opt) =>
-        opt.setName("bet").setDescription("Amount to bet").setRequired(true).setMinValue(100)
+      .addStringOption((opt) =>
+        opt.setName("bet").setDescription("Amount to bet (e.g. 1k, 1m, 1b, all)").setRequired(true)
       )
   )
   .addSubcommand((sub) =>
     sub
       .setName("coinflip")
       .setDescription("Flip a coin — heads or tails?")
-      .addIntegerOption((opt) =>
-        opt.setName("bet").setDescription("Amount to bet").setRequired(true).setMinValue(1)
+      .addStringOption((opt) =>
+        opt.setName("bet").setDescription("Amount to bet (e.g. 1k, 1m, 1b, all)").setRequired(true)
       )
       .addStringOption((opt) =>
         opt.setName("choice").setDescription("Heads or tails?").setRequired(true)
@@ -58,8 +59,8 @@ export const data = new SlashCommandBuilder()
     sub
       .setName("dice")
       .setDescription("Roll dice — pick a number 1-6")
-      .addIntegerOption((opt) =>
-        opt.setName("bet").setDescription("Amount to bet").setRequired(true).setMinValue(1)
+      .addStringOption((opt) =>
+        opt.setName("bet").setDescription("Amount to bet (e.g. 1k, 1m, 1b, all)").setRequired(true)
       )
       .addIntegerOption((opt) =>
         opt.setName("number").setDescription("Pick a number (1-6)").setRequired(true)
@@ -71,10 +72,19 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply();
   const sub = interaction.options.getSubcommand();
-  const bet = interaction.options.getInteger("bet", true);
+  const betStr = interaction.options.getString("bet", true);
   const userId = interaction.user.id;
   const guildId = interaction.guildId!;
   const user = await getOrCreateUser(userId, guildId, interaction.user.username);
+
+  const bet = parseAmount(betStr, user.credits);
+  if (bet === null || bet < 1) {
+    await interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(0xed4245).setTitle("❌ Invalid Amount")
+        .setDescription("Use a number like `1000`, `1k`, `1m`, `1b`, or `all`.").setTimestamp()],
+    });
+    return;
+  }
 
   if (user.credits < bet) {
     await interaction.editReply({

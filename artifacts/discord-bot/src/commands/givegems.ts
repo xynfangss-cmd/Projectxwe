@@ -5,7 +5,7 @@ import {
   MessageFlags,
 } from "discord.js";
 import { getOrCreateUser, updateUser } from "../utils/db.js";
-import { formatNumber } from "../utils/constants.js";
+import { formatNumber, parseAmount } from "../utils/constants.js";
 import { isAdmin } from "../utils/perms.js";
 
 export const data = new SlashCommandBuilder()
@@ -14,12 +14,11 @@ export const data = new SlashCommandBuilder()
   .addUserOption((opt) =>
     opt.setName("member").setDescription("The member to give gems to").setRequired(true)
   )
-  .addIntegerOption((opt) =>
+  .addStringOption((opt) =>
     opt
       .setName("amount")
-      .setDescription("How many gems to give")
+      .setDescription("How many gems to give (e.g. 1k, 1m, 1b)")
       .setRequired(true)
-      .setMinValue(1)
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -30,9 +29,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-  const target  = interaction.options.getUser("member", true);
-  const amount  = interaction.options.getInteger("amount", true);
-  const guildId = interaction.guildId!;
+  const target    = interaction.options.getUser("member", true);
+  const amountStr = interaction.options.getString("amount", true);
+  const guildId   = interaction.guildId!;
 
   if (target.bot) {
     await interaction.editReply({ content: "❌ You can't give gems to a bot!" });
@@ -40,6 +39,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   const targetUser = await getOrCreateUser(target.id, guildId, target.username);
+  const amount = parseAmount(amountStr);
+  if (amount === null || amount < 1) {
+    await interaction.editReply({ content: "❌ Invalid amount. Use a number like `1000`, `1k`, `1m`, `1b`." });
+    return;
+  }
   const newBalance = targetUser.credits + amount;
 
   await updateUser(target.id, guildId, { credits: newBalance });

@@ -5,7 +5,7 @@ import {
   MessageFlags,
 } from "discord.js";
 import { getOrCreateUser, updateUser } from "../utils/db.js";
-import { formatNumber } from "../utils/constants.js";
+import { formatNumber, parseAmount } from "../utils/constants.js";
 
 export const data = new SlashCommandBuilder()
   .setName("gift")
@@ -13,17 +13,17 @@ export const data = new SlashCommandBuilder()
   .addUserOption((opt) =>
     opt.setName("member").setDescription("The member to gift gems to").setRequired(true)
   )
-  .addIntegerOption((opt) =>
-    opt.setName("amount").setDescription("How many gems to gift").setRequired(true).setMinValue(1)
+  .addStringOption((opt) =>
+    opt.setName("amount").setDescription("How many gems to gift (e.g. 1k, 1m, 1b, all)").setRequired(true)
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply();
 
-  const target  = interaction.options.getUser("member", true);
-  const amount  = interaction.options.getInteger("amount", true);
-  const guildId = interaction.guildId!;
-  const sender  = interaction.user;
+  const target    = interaction.options.getUser("member", true);
+  const amountStr = interaction.options.getString("amount", true);
+  const guildId   = interaction.guildId!;
+  const sender    = interaction.user;
 
   if (target.id === sender.id) {
     await interaction.editReply({ content: "❌ You can't gift gems to yourself!" });
@@ -38,6 +38,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     getOrCreateUser(sender.id, guildId, sender.username),
     getOrCreateUser(target.id, guildId, target.username),
   ]);
+
+  const amount = parseAmount(amountStr, senderUser.credits);
+  if (amount === null || amount < 1) {
+    await interaction.editReply({ content: "❌ Invalid amount. Use a number like `1000`, `1k`, `1m`, `1b`, or `all`." });
+    return;
+  }
 
   if (senderUser.credits < amount) {
     await interaction.editReply({

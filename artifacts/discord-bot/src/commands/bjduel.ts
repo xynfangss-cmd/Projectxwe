@@ -12,7 +12,7 @@ import { db } from "@workspace/db";
 import { discordDuels } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { getOrCreateUser, updateUser } from "../utils/db.js";
-import { formatNumber } from "../utils/constants.js";
+import { formatNumber, parseAmount } from "../utils/constants.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type DuelStatus = "pending" | "challenger_turn" | "opponent_turn" | "done";
@@ -280,15 +280,15 @@ export const data = new SlashCommandBuilder()
   .addUserOption((opt) =>
     opt.setName("opponent").setDescription("The member to challenge").setRequired(true)
   )
-  .addIntegerOption((opt) =>
-    opt.setName("bet").setDescription("How many gems to wager").setRequired(true).setMinValue(1000)
+  .addStringOption((opt) =>
+    opt.setName("bet").setDescription("How many gems to wager (e.g. 1k, 1m, 1b, all)").setRequired(true)
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply();
 
   const opponent   = interaction.options.getUser("opponent", true);
-  const bet        = interaction.options.getInteger("bet", true);
+  const betStr     = interaction.options.getString("bet", true);
   const guildId    = interaction.guildId!;
   const challenger = interaction.user;
 
@@ -302,6 +302,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   const cUser = await getOrCreateUser(challenger.id, guildId, challenger.username);
+  const bet = parseAmount(betStr, cUser.credits);
+  if (bet === null || bet < 1) {
+    await interaction.editReply({ content: "❌ Invalid amount. Use a number like `1000`, `1k`, `1m`, `1b`, or `all`." });
+    return;
+  }
   if (cUser.credits < bet) {
     await interaction.editReply({
       content: `❌ You only have **${formatNumber(cUser.credits)}** gems — you need **${formatNumber(bet)}**.`,

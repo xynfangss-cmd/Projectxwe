@@ -9,7 +9,7 @@ import {
   MessageFlags,
 } from "discord.js";
 import { getOrCreateUser, updateUser } from "../utils/db.js";
-import { formatNumber } from "../utils/constants.js";
+import { formatNumber, parseAmount } from "../utils/constants.js";
 
 // ── In-memory pending games ────────────────────────────────────────────────
 interface StockGame {
@@ -135,20 +135,19 @@ function buildResultEmbed(ticker: string, bet: number, won: boolean, newBalance:
 export const data = new SlashCommandBuilder()
   .setName("stocks")
   .setDescription("Invest gems in the GEM Stock Exchange — 50/50 chance to double your money!")
-  .addIntegerOption((opt) =>
+  .addStringOption((opt) =>
     opt
       .setName("amount")
-      .setDescription("How many gems to invest")
+      .setDescription("How many gems to invest (e.g. 1k, 1m, 1b, all)")
       .setRequired(true)
-      .setMinValue(1)
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   try { await interaction.deferReply(); } catch { return; }
 
-  const amount  = interaction.options.getInteger("amount", true);
-  const userId  = interaction.user.id;
-  const guildId = interaction.guildId!;
+  const amountStr = interaction.options.getString("amount", true);
+  const userId    = interaction.user.id;
+  const guildId   = interaction.guildId!;
 
   // Prevent concurrent games
   if (pending.has(userId)) {
@@ -157,6 +156,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   const dbUser = await getOrCreateUser(userId, guildId, interaction.user.username);
+  const amount = parseAmount(amountStr, dbUser.credits);
+  if (amount === null || amount < 1) {
+    await interaction.editReply({ content: "❌ Invalid amount. Use a number like `1000`, `1k`, `1m`, `1b`, or `all`." });
+    return;
+  }
 
   if (dbUser.credits < amount) {
     await interaction.editReply({
