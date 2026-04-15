@@ -49,10 +49,70 @@ export async function handleMessage(client: Client, message: Message) {
   const prevLevel = prevUser.level;
 
   const updatedUser = await addCredits(message.author.id, message.guild.id, creditsEarned);
+  const newMsgCount = updatedUser.messageCount + 1;
   await updateUser(message.author.id, message.guild.id, {
-    messageCount: updatedUser.messageCount + 1,
+    messageCount: newMsgCount,
     lastMessageAt: new Date(),
   });
+
+  // ── Message milestone rewards ──────────────────────────────────────────────
+  const MILESTONE_50_REWARD = 100_000_000;
+  const MILESTONE_10_REWARD = 1_000_000;
+
+  let milestoneReward = 0;
+  let milestoneType: "50" | "10" | null = null;
+
+  if (newMsgCount % 50 === 0) {
+    milestoneReward = MILESTONE_50_REWARD;
+    milestoneType = "50";
+  } else if (newMsgCount % 10 === 0) {
+    milestoneReward = MILESTONE_10_REWARD;
+    milestoneType = "10";
+  }
+
+  if (milestoneType) {
+    const afterMilestone = await addCredits(message.author.id, message.guild.id, milestoneReward);
+    const rewardChannelId = settings.creditsChannelId ?? settings.levelUpChannelId;
+    const rewardCh = rewardChannelId
+      ? message.guild.channels.cache.get(rewardChannelId) as TextChannel | undefined
+      : message.channel as TextChannel;
+
+    if (milestoneType === "50") {
+      const milestoneEmbed = new EmbedBuilder()
+        .setColor(0xffd700)
+        .setTitle("🎉 50 Message Milestone!")
+        .setDescription(
+          `<@${message.author.id}> has sent **${formatNumber(newMsgCount)} messages** and earned a massive reward!`
+        )
+        .addFields(
+          { name: "🎁 Reward",        value: `💎 **+${formatNumber(milestoneReward)} gems**`, inline: true },
+          { name: "💰 New Balance",   value: `${formatNumber(afterMilestone.credits)} gems`,  inline: true },
+          { name: "💬 Total Messages",value: `${formatNumber(newMsgCount)}`,                  inline: true },
+        )
+        .setThumbnail(message.author.displayAvatarURL({ size: 128 }))
+        .setFooter({ text: "Keep chatting to earn more milestone rewards!" })
+        .setTimestamp();
+
+      await rewardCh?.send({ content: `<@${message.author.id}>`, embeds: [milestoneEmbed] }).catch(() => {});
+    } else {
+      const milestoneEmbed = new EmbedBuilder()
+        .setColor(0x57f287)
+        .setTitle("📨 10 Message Milestone!")
+        .setDescription(
+          `<@${message.author.id}> has sent **${formatNumber(newMsgCount)} messages** and earned a reward!`
+        )
+        .addFields(
+          { name: "🎁 Reward",        value: `💎 **+${formatNumber(milestoneReward)} gems**`, inline: true },
+          { name: "💰 New Balance",   value: `${formatNumber(afterMilestone.credits)} gems`,  inline: true },
+          { name: "💬 Total Messages",value: `${formatNumber(newMsgCount)}`,                  inline: true },
+        )
+        .setThumbnail(message.author.displayAvatarURL({ size: 64 }))
+        .setFooter({ text: "Every 50 messages earns 100M gems!" })
+        .setTimestamp();
+
+      await rewardCh?.send({ content: `<@${message.author.id}>`, embeds: [milestoneEmbed] }).catch(() => {});
+    }
+  }
 
   const newRank = getRankForCredits(updatedUser.credits);
 
