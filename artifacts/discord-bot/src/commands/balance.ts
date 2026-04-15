@@ -1,10 +1,10 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from "discord.js";
-import { getOrCreateUser, getOrCreateBankAccount } from "../utils/db.js";
-import { formatNumber, getRankForCredits } from "../utils/constants.js";
+import { getOrCreateUser } from "../utils/db.js";
+import { formatNumber, getRankForCredits, RANKS } from "../utils/constants.js";
 
 export const data = new SlashCommandBuilder()
   .setName("balance")
-  .setDescription("Check your wallet and bank balance")
+  .setDescription("Check your gem balance and rank progress")
   .addUserOption((opt) =>
     opt.setName("user").setDescription("Check another user's balance").setRequired(false)
   );
@@ -14,13 +14,19 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const target = interaction.options.getUser("user") ?? interaction.user;
   const guildId = interaction.guildId!;
 
-  const [user, bank] = await Promise.all([
-    getOrCreateUser(target.id, guildId, target.username),
-    getOrCreateBankAccount(target.id, guildId),
-  ]);
+  const user = await getOrCreateUser(target.id, guildId, target.username);
 
   const rank = getRankForCredits(user.totalCreditsEarned);
-  const total = user.credits + bank.balance;
+  const rankIndex = [...RANKS].findIndex(r => r.name === rank.name);
+  const nextRank = rankIndex < RANKS.length - 1 ? RANKS[rankIndex + 1] : null;
+
+  let nextRankValue: string;
+  if (!nextRank) {
+    nextRankValue = "👑 **MAX RANK ACHIEVED**";
+  } else {
+    const needed = nextRank.minCredits - user.totalCreditsEarned;
+    nextRankValue = `${nextRank.emoji} **${nextRank.name}**\n${formatNumber(needed)} gems to go`;
+  }
 
   const embed = new EmbedBuilder()
     .setColor(rank.color as number)
@@ -28,8 +34,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     .setThumbnail(target.displayAvatarURL({ size: 64 }))
     .addFields(
       { name: "Wallet", value: `💰 **${formatNumber(user.credits)}** gems`, inline: true },
-      { name: "Bank", value: `🏦 **${formatNumber(bank.balance)}** gems`, inline: true },
-      { name: "Total", value: `💎 **${formatNumber(total)}** gems`, inline: true },
+      { name: "Next Rank", value: nextRankValue, inline: true },
+      { name: "Total Earned", value: `💎 **${formatNumber(user.totalCreditsEarned)}** gems`, inline: true },
       { name: "XP", value: `🌟 ${formatNumber(user.xp)} XP`, inline: true },
       { name: "Rank", value: `${rank.emoji} ${rank.name}`, inline: true },
       { name: "Level", value: `⭐ Level ${user.level}`, inline: true },
