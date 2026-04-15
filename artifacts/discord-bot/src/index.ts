@@ -52,7 +52,7 @@ import * as work from "./commands/work.js";
 import * as crime from "./commands/crime.js";
 import * as balance from "./commands/balance.js";
 import * as bank from "./commands/bank.js";
-import * as transfer from "./commands/transfer.js";
+
 import * as gamble from "./commands/gamble.js";
 import * as giveaway from "./commands/giveaway.js";
 import * as shop from "./commands/shop.js";
@@ -85,7 +85,7 @@ type Command = {
 const commands = new Collection<string, Command>();
 const allCommands = [
   rank, leaderboard, chest, daily, weekly, work, crime, balance,
-  bank, transfer, gamble, giveaway, shop, admin, ranks, help,
+  bank, gamble, giveaway, shop, admin, ranks, help,
   blackjack, mines, setupverify, tickets, setchest, setupboostergiveaway, startboostergiveaway,
   createcode, activecodes, redeem, bjduel, gift, givegems, stocks, giverole,
 ];
