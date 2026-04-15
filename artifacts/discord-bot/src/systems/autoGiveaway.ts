@@ -9,10 +9,10 @@ import {
 import { getOrCreateGuildSettings, updateGuildSettings, getOrCreateUser, updateUser } from "../utils/db.js";
 import { formatNumber } from "../utils/constants.js";
 
-const CYCLE_MS      = 30 * 60 * 1000;   // every 30 minutes
-const DURATION_MS   = 10 * 60 * 1000;   // open for 10 minutes
+const CYCLE_MS      = 45 * 60 * 1000;   // every 45 minutes
+const DURATION_MS   = 15 * 60 * 1000;   // open for 15 minutes
 const MIN_PRIZE     = 1_000_000;
-const MAX_PRIZE     = 100_000_000;
+const MAX_PRIZE     = 50_000_000;
 const MIN_WINNERS   = 1;
 const MAX_WINNERS   = 3;
 
@@ -50,17 +50,21 @@ function timeLeft(endsAt: number): string {
 }
 
 function prizeColor(prize: number): number {
-  if (prize >= 75_000_000) return 0xffd700;  // gold
-  if (prize >= 40_000_000) return 0x57f287;  // green
-  if (prize >= 15_000_000) return 0x5865f2;  // blurple
+  if (prize >= 40_000_000) return 0xffd700;  // gold
+  if (prize >= 20_000_000) return 0x57f287;  // green
+  if (prize >= 10_000_000) return 0x5865f2;  // blurple
   return 0x00b0f4;                            // blue
 }
 
 function prizeEmoji(prize: number): string {
-  if (prize >= 75_000_000) return "💰";
-  if (prize >= 40_000_000) return "💎";
-  if (prize >= 15_000_000) return "🎁";
+  if (prize >= 40_000_000) return "💰";
+  if (prize >= 20_000_000) return "💎";
+  if (prize >= 10_000_000) return "🎁";
   return "✨";
+}
+
+function winnerLabel(n: number): string {
+  return n === 1 ? "1 Winner" : `${n} Winners`;
 }
 
 // ── Embed builders ────────────────────────────────────────────────────────────
@@ -68,33 +72,38 @@ function buildEmbed(round: AutoRound): EmbedBuilder {
   const perWinner = Math.floor(round.prize / round.maxWinners);
   const emoji     = prizeEmoji(round.prize);
   const color     = prizeColor(round.prize);
+  const endsAt    = Math.floor(round.endsAt / 1000);
 
   return new EmbedBuilder()
     .setColor(color)
-    .setTitle(`${emoji} Gem Giveaway!`)
+    .setTitle(`${emoji} Gem Giveaway — ${formatNumber(round.prize)} Gems!`)
     .setDescription(
       [
-        `**${formatNumber(round.prize)} gems** are up for grabs!`,
-        "",
-        `> 🏆 **Winners:** ${round.maxWinners}`,
-        `> 💎 **Prize per winner:** ${formatNumber(perWinner)} gems`,
-        `> ⏰ **Ends in:** ${timeLeft(round.endsAt)}`,
+        `> 💎 **Prize Pool:** ${formatNumber(round.prize)} gems`,
+        `> 🏆 **Winners:** ${winnerLabel(round.maxWinners)}`,
+        `> 🪙 **Per Winner:** ${formatNumber(perWinner)} gems`,
+        `> ⏰ **Ends:** <t:${endsAt}:R> (<t:${endsAt}:t>)`,
         `> 👥 **Entries:** ${round.entrants.size}`,
         "",
-        "Press **Enter Giveaway** below for your chance to win!",
+        "━━━━━━━━━━━━━━━━━━━━━━━",
+        "🎉 Press **Enter Giveaway** below for your chance to win!",
       ].join("\n")
     )
-    .setImage("https://i.imgur.com/your-banner.png") // optional banner
-    .setFooter({ text: "Anyone can enter · New giveaway every 30 minutes" })
+    .addFields(
+      { name: "🎁 How to Enter", value: "Click the button below — one entry per member.", inline: false },
+    )
+    .setFooter({ text: "Auto Giveaway · Hosted every 45 minutes · Good luck!" })
     .setTimestamp();
 }
 
-function buildRow(roundId: string): ActionRowBuilder<ButtonBuilder> {
+function buildRow(roundId: string, disabled = false): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`autogaw_enter_${roundId}`)
-      .setLabel("🎉 Enter Giveaway")
+      .setLabel("Enter Giveaway")
+      .setEmoji("🎉")
       .setStyle(ButtonStyle.Success)
+      .setDisabled(disabled)
   );
 }
 
@@ -121,6 +130,7 @@ async function postGiveaway(client: Client, guildId: string, channelId: string):
   activeRounds.set(roundId, round);
 
   const msg = await channel.send({
+    content: "@everyone 🎉 A new giveaway has started!",
     embeds: [buildEmbed(round)],
     components: [buildRow(roundId)],
   }).catch(() => null);
@@ -167,30 +177,32 @@ async function endGiveaway(client: Client, roundId: string): Promise<void> {
   const endEmbed = new EmbedBuilder()
     .setColor(winners.length > 0 ? prizeColor(round.prize) : 0x99aab5)
     .setTitle(`${prizeEmoji(round.prize)} Giveaway Ended!`)
-    .setDescription(resultDesc)
-    .addFields(
-      { name: "💎 Total Prize",   value: formatNumber(round.prize),           inline: true },
-      { name: "👥 Total Entries", value: `${round.entrants.size}`,            inline: true },
-      { name: "🏆 Winners",       value: `${winners.length}`,                 inline: true },
-      ...(winners.length > 1
-        ? [{ name: "💰 Per Winner", value: formatNumber(perWinner), inline: true }]
-        : []),
+    .setDescription(
+      [
+        resultDesc,
+        "",
+        "━━━━━━━━━━━━━━━━━━━━━━━",
+        `> 💎 **Total Prize:** ${formatNumber(round.prize)} gems`,
+        `> 👥 **Total Entries:** ${round.entrants.size}`,
+        `> 🏆 **Winners:** ${winners.length}`,
+        ...(winners.length > 1 ? [`> 🪙 **Per Winner:** ${formatNumber(perWinner)} gems`] : []),
+      ].join("\n")
     )
-    .setFooter({ text: "Next giveaway in ~30 minutes" })
+    .setFooter({ text: "Auto Giveaway · Next giveaway in ~45 minutes · Stay active!" })
     .setTimestamp();
 
-  // Edit original message
+  // Edit original message — show disabled button
   if (channel && round.messageId) {
     await channel.messages
       .fetch(round.messageId)
-      .then((m) => m.edit({ embeds: [endEmbed], components: [] }))
+      .then((m) => m.edit({ embeds: [endEmbed], components: [buildRow(round.roundId, true)] }))
       .catch(() => {});
   }
 
   // Ping winners
   if (channel && winners.length > 0) {
     await channel.send({
-      content: `🎉 Congratulations ${winners.map((w) => `<@${w}>`).join(", ")}! You each won **${formatNumber(perWinner)} gems**!`,
+      content: `🎉 Congratulations ${winners.map((w) => `<@${w}>`).join(", ")}! You each won **${formatNumber(perWinner)} gems**! Check your balance with \`/balance\`.`,
     }).catch(() => {});
   }
 
@@ -245,7 +257,7 @@ async function scheduleForGuild(client: Client, guildId: string): Promise<void> 
 
   console.log(
     `[AutoGiveaway] Guild ${guildId}: last posted ${Math.round(elapsed / 60_000)}m ago. ` +
-    `Next in ${Math.round(msUntilNext / 60_000)}m.`
+    `Next in ${Math.round(msUntilNext / 60_000)}m. (cycle: 45m)`
   );
 
   setTimeout(async () => {
