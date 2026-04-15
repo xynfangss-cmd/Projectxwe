@@ -274,16 +274,39 @@ export async function handleAutoGawEntry(
 }
 
 // ── Channel resolver ──────────────────────────────────────────────────────────
+const CHANNEL_NAME_VARIANTS = [
+  "auto-giveaways", "auto-giveaway", "giveaways", "giveaway",
+  "gem-giveaway", "gem-giveaways",
+];
+
 async function resolveChannel(client: Client, guildId: string): Promise<string | null> {
   const guild = client.guilds.cache.get(guildId);
   if (!guild) return null;
 
-  const ch = guild.channels.cache.find(
-    (c) =>
-      c.type === 0 &&
-      c.name.toLowerCase().replace(/[\s_]/g, "-") === "auto-giveaways"
-  );
-  return ch?.id ?? null;
+  // 1. Check DB-configured channel
+  const settings = await getOrCreateGuildSettings(guildId).catch(() => null);
+  if (settings?.giveawayChannelId) {
+    const dbCh = guild.channels.cache.get(settings.giveawayChannelId) ??
+      await guild.channels.fetch(settings.giveawayChannelId).catch(() => null);
+    if (dbCh) return dbCh.id;
+  }
+
+  // 2. Search by name variants
+  await guild.channels.fetch().catch(() => {});
+  const ch = guild.channels.cache.find(c => {
+    if (c.type !== 0) return false;
+    const norm = c.name.toLowerCase().replace(/[\s_]/g, "-");
+    return CHANNEL_NAME_VARIANTS.includes(norm);
+  });
+
+  if (ch) {
+    console.log(`[AutoGiveaway] Found channel "${ch.name}" (${ch.id}) for guild ${guildId}`);
+    return ch.id;
+  }
+
+  console.warn(`[AutoGiveaway] No giveaway channel found for guild ${guildId}. ` +
+    `Create a channel named "giveaways" or set one via /admin setup.`);
+  return null;
 }
 
 // ── Scheduler ─────────────────────────────────────────────────────────────────
