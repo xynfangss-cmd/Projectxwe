@@ -1,0 +1,9 @@
+node_modules
+.local
+attached_assets
+artifacts/api-server
+artifacts/bot-dashboard
+artifacts/mockup-sandbox
+lib/integrations
+scripts
+*.log
