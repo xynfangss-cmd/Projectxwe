@@ -259,29 +259,29 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
 
     const member = interaction.member as GuildMember;
 
-    // Find the Unverified and Verified roles
+    // Find the Unverified and Member roles
     const unverifiedRole = guild.roles.cache.find(
       (r: Role) => r.name.toLowerCase() === "unverified"
     );
-    const verifiedRole = guild.roles.cache.find(
-      (r: Role) => r.name.toLowerCase() === "verified"
+    const memberRole = guild.roles.cache.find(
+      (r: Role) => r.name.toLowerCase() === "member"
     );
 
-    if (!unverifiedRole || !verifiedRole) {
+    if (!unverifiedRole || !memberRole) {
       await interaction.editReply({ content: "⚠️ Verification system is not fully set up. Ask an admin to run `/setupverify`." });
       return;
     }
 
-    // Already has the verified role
-    if (member.roles.cache.has(verifiedRole.id)) {
+    // Already verified (has Member role, no longer Unverified)
+    if (member.roles.cache.has(memberRole.id)) {
       await interaction.editReply({ content: "✅ You are already verified!" });
       return;
     }
 
-    // Swap roles: remove Unverified, add Verified — opens the whole server
+    // Swap roles: remove Unverified, add Member — opens the whole server
     await Promise.all([
       member.roles.remove(unverifiedRole, "Member verified").catch(() => {}),
-      member.roles.add(verifiedRole, "Member verified").catch(() => {}),
+      member.roles.add(memberRole, "Member verified").catch(() => {}),
     ]);
 
     // Give 100M gems to the new member

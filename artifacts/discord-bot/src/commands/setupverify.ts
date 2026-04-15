@@ -45,24 +45,24 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     steps.push("✅ Found existing **Unverified** role");
   }
 
-  // ── 2. Create or find the "Verified" role ─────────────────────────────────
-  let verifiedRole: Role | null = guild.roles.cache.find(
-    (r) => r.name.toLowerCase() === "verified"
+  // ── 2. Create or find the "Member" role ──────────────────────────────────
+  let memberRole: Role | null = guild.roles.cache.find(
+    (r) => r.name.toLowerCase() === "member"
   ) ?? null;
 
-  if (!verifiedRole) {
-    verifiedRole = await guild.roles.create({
-      name: "Verified",
+  if (!memberRole) {
+    memberRole = await guild.roles.create({
+      name: "Member",
       color: 0x57f287,
       permissions: [],
       reason: "GEM Bot verification setup",
     });
-    steps.push("✅ Created **Verified** role");
+    steps.push("✅ Created **Member** role");
   } else {
-    steps.push("✅ Found existing **Verified** role");
+    steps.push("✅ Found existing **Member** role");
   }
 
-  // ── 3. Set channel permissions — Verified can see all, Unverified cannot ──
+  // ── 3. Set channel permissions — Member can see all, Unverified cannot ───
   let lockedCount = 0;
   for (const [, channel] of guild.channels.cache) {
     if (
@@ -73,8 +73,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     if ((channel as TextChannel).name === "verify") continue;
 
     try {
-      // Allow Verified to see the channel
-      await channel.permissionOverwrites.edit(verifiedRole, {
+      // Allow Member to see the channel
+      await channel.permissionOverwrites.edit(memberRole, {
         ViewChannel: true,
       });
       // Block Unverified from seeing the channel
@@ -106,9 +106,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
           allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory],
           deny: [PermissionFlagsBits.SendMessages],
         },
-        // Verified cannot see #verify (they're done)
+        // Member cannot see #verify (they're done)
         {
-          id: verifiedRole,
+          id: memberRole,
           type: OverwriteType.Role,
           deny: [PermissionFlagsBits.ViewChannel],
         },
@@ -123,7 +123,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       ReadMessageHistory: true,
       SendMessages: false,
     });
-    await verifyChannel.permissionOverwrites.edit(verifiedRole, { ViewChannel: false });
+    await verifyChannel.permissionOverwrites.edit(memberRole, { ViewChannel: false });
     steps.push("✅ Updated **#verify** channel permissions");
   }
 
@@ -164,7 +164,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       steps.join("\n"),
       "",
       `**Unverified role:** <@&${unverifiedRole.id}> — assigned on join, can only see #verify`,
-      `**Verified role:** <@&${verifiedRole.id}> — granted on verify, can see all channels`,
+      `**Member role:** <@&${memberRole.id}> — granted on verify, can see all channels`,
       `**Verify channel:** <#${verifyChannel.id}>`,
       "",
       "New members will automatically receive **Unverified** when they join and unlock the server once they click Verify.",
