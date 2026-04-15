@@ -45,7 +45,7 @@ export async function handleMessage(client: Client, message: Message) {
   );
 
   const prevUser = await getOrCreateUser(message.author.id, message.guild.id, message.author.username);
-  const prevRank = getRankForCredits(prevUser.totalCreditsEarned);
+  const prevRank = getRankForCredits(prevUser.credits);
   const prevLevel = prevUser.level;
 
   const updatedUser = await addCredits(message.author.id, message.guild.id, creditsEarned);
@@ -54,11 +54,12 @@ export async function handleMessage(client: Client, message: Message) {
     lastMessageAt: new Date(),
   });
 
-  const newRank = getRankForCredits(updatedUser.totalCreditsEarned);
+  const newRank = getRankForCredits(updatedUser.credits);
 
-  // Rank-up notification + role assignment
+  // Rank change notification + role assignment (handles both rank-up AND rank-down)
   if (newRank.name !== prevRank.name) {
-    // Assign new rank role and remove old rank role
+    const isPromotion = RANKS.findIndex(r => r.name === newRank.name) > RANKS.findIndex(r => r.name === prevRank.name);
+
     try {
       const member = message.member ?? await message.guild.members.fetch(message.author.id);
       const roleRewards = await getGuildRoleRewards(message.guild.id);
@@ -75,11 +76,15 @@ export async function handleMessage(client: Client, message: Message) {
 
     const rankEmbed = new EmbedBuilder()
       .setColor(newRank.color as number)
-      .setTitle(`${newRank.emoji} Rank Up!`)
-      .setDescription(`<@${message.author.id}> has ranked up to **${newRank.name}**!`)
+      .setTitle(isPromotion ? `${newRank.emoji} Rank Up!` : `${newRank.emoji} Rank Changed`)
+      .setDescription(
+        isPromotion
+          ? `<@${message.author.id}> has ranked up to **${newRank.name}**!`
+          : `<@${message.author.id}>'s rank has changed to **${newRank.name}**.`
+      )
       .addFields(
-        { name: "New Rank", value: `${newRank.emoji} ${newRank.name}`, inline: true },
-        { name: "Total Credits", value: formatNumber(updatedUser.totalCreditsEarned), inline: true }
+        { name: isPromotion ? "New Rank" : "Current Rank", value: `${newRank.emoji} ${newRank.name}`, inline: true },
+        { name: "Wallet Balance", value: formatNumber(updatedUser.credits), inline: true }
       )
       .setThumbnail(message.author.displayAvatarURL({ size: 64 }))
       .setTimestamp();

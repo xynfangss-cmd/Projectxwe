@@ -9,11 +9,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const embed = new EmbedBuilder()
     .setColor(0xffd700)
     .setTitle("🏆 Rank Tiers")
-    .setDescription("Earn gems by chatting to climb the ranks!")
+    .setDescription("Your rank is based on your **current wallet balance** — it goes up when you earn gems and down if you spend or lose them.")
     .addFields(
       RANKS.map((r) => ({
         name: `${r.emoji} ${r.name}`,
-        value: r.minCredits === 0 ? "Starting rank" : `${formatNumber(r.minCredits)}+ total gems earned`,
+        value: r.minCredits === 0 ? "Starting rank" : `${formatNumber(r.minCredits)}+ gems in wallet`,
         inline: true,
       }))
     )

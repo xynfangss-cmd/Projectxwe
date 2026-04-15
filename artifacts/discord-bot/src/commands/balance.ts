@@ -16,7 +16,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   const user = await getOrCreateUser(target.id, guildId, target.username);
 
-  const rank = getRankForCredits(user.totalCreditsEarned);
+  const rank = getRankForCredits(user.credits);
   const rankIndex = [...RANKS].findIndex(r => r.name === rank.name);
   const nextRank = rankIndex < RANKS.length - 1 ? RANKS[rankIndex + 1] : null;
 
@@ -24,7 +24,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   if (!nextRank) {
     nextRankValue = "👑 **MAX RANK ACHIEVED**";
   } else {
-    const needed = nextRank.minCredits - user.totalCreditsEarned;
+    const needed = nextRank.minCredits - user.credits;
     nextRankValue = `${nextRank.emoji} **${nextRank.name}**\n${formatNumber(needed)} gems to go`;
   }
 
@@ -35,10 +35,10 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     .addFields(
       { name: "Wallet", value: `💰 **${formatNumber(user.credits)}** gems`, inline: true },
       { name: "Next Rank", value: nextRankValue, inline: true },
-      { name: "Total Earned", value: `💎 **${formatNumber(user.totalCreditsEarned)}** gems`, inline: true },
+      { name: "Current Rank", value: `${rank.emoji} **${rank.name}**`, inline: true },
       { name: "XP", value: `🌟 ${formatNumber(user.xp)} XP`, inline: true },
-      { name: "Rank", value: `${rank.emoji} ${rank.name}`, inline: true },
       { name: "Level", value: `⭐ Level ${user.level}`, inline: true },
+      { name: "Messages", value: `💬 ${formatNumber(user.messageCount)}`, inline: true },
     )
     .setTimestamp();
 
