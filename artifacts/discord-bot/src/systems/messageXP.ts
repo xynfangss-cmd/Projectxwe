@@ -4,6 +4,7 @@ import {
   updateUser,
   getOrCreateGuildSettings,
   addCredits,
+  getGuildRoleRewards,
 } from "../utils/db.js";
 import {
   CREDITS_PER_MESSAGE_MIN,
@@ -55,8 +56,23 @@ export async function handleMessage(client: Client, message: Message) {
 
   const newRank = getRankForCredits(updatedUser.totalCreditsEarned);
 
-  // Rank-up notification
+  // Rank-up notification + role assignment
   if (newRank.name !== prevRank.name) {
+    // Assign new rank role and remove old rank role
+    try {
+      const member = message.member ?? await message.guild.members.fetch(message.author.id);
+      const roleRewards = await getGuildRoleRewards(message.guild.id);
+      const newRoleReward = roleRewards.find(r => r.rankName === newRank.name);
+      const oldRoleReward = roleRewards.find(r => r.rankName === prevRank.name);
+
+      if (oldRoleReward) {
+        await member.roles.remove(oldRoleReward.roleId).catch(() => {});
+      }
+      if (newRoleReward) {
+        await member.roles.add(newRoleReward.roleId).catch(() => {});
+      }
+    } catch {}
+
     const rankEmbed = new EmbedBuilder()
       .setColor(newRank.color as number)
       .setTitle(`${newRank.emoji} Rank Up!`)

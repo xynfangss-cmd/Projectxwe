@@ -8,6 +8,7 @@ import {
   discordShopItems,
   discordTransactions,
   discordCodes,
+  discordRoleRewards,
 } from "@workspace/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { getRankForCredits, xpForLevel } from "./constants.js";
@@ -299,4 +300,36 @@ export async function redeemCode(
     .where(eq(discordCodes.id, row.id));
 
   return row.reward;
+}
+
+export async function getGuildRoleRewards(guildId: string) {
+  return db
+    .select()
+    .from(discordRoleRewards)
+    .where(eq(discordRoleRewards.guildId, guildId));
+}
+
+export async function setRoleReward(guildId: string, rankName: string, roleId: string) {
+  const [existing] = await db
+    .select()
+    .from(discordRoleRewards)
+    .where(and(eq(discordRoleRewards.guildId, guildId), eq(discordRoleRewards.rankName, rankName)))
+    .limit(1);
+
+  if (existing) {
+    await db
+      .update(discordRoleRewards)
+      .set({ roleId })
+      .where(and(eq(discordRoleRewards.guildId, guildId), eq(discordRoleRewards.rankName, rankName)));
+  } else {
+    await db
+      .insert(discordRoleRewards)
+      .values({ guildId, rankName, roleId, requiredCredits: 0 });
+  }
+}
+
+export async function removeRoleReward(guildId: string, rankName: string) {
+  await db
+    .delete(discordRoleRewards)
+    .where(and(eq(discordRoleRewards.guildId, guildId), eq(discordRoleRewards.rankName, rankName)));
 }

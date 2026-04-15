@@ -11,6 +11,9 @@ import {
   addXp,
   getOrCreateGuildSettings,
   updateGuildSettings,
+  getGuildRoleRewards,
+  setRoleReward,
+  removeRoleReward,
 } from "../utils/db.js";
 import { getRankForCredits, RANKS, formatNumber } from "../utils/constants.js";
 
@@ -58,6 +61,29 @@ export const data = new SlashCommandBuilder()
   )
   .addSubcommand((sub) =>
     sub.setName("serverinfo").setDescription("View current server configuration")
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("setrankreward")
+      .setDescription("Link a Discord role to a rank tier (auto-assigned on rank-up)")
+      .addStringOption((opt) =>
+        opt.setName("rank").setDescription("The rank tier").setRequired(true)
+          .addChoices(
+            { name: "⚪ Member",   value: "Member"   },
+            { name: "🟤 Copper",   value: "Copper"   },
+            { name: "🟡 Gold",     value: "Gold"     },
+            { name: "🟢 Emerald",  value: "Emerald"  },
+            { name: "🔵 Diamond",  value: "Diamond"  },
+            { name: "🔴 Ruby",     value: "Ruby"     },
+            { name: "⚫ Titanium", value: "Titanium" },
+          )
+      )
+      .addRoleOption((opt) =>
+        opt.setName("role").setDescription("Discord role to assign for this rank (leave out to remove)").setRequired(false)
+      )
+  )
+  .addSubcommand((sub) =>
+    sub.setName("viewrankrewards").setDescription("View all configured rank role rewards")
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -176,6 +202,55 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
         { name: "Credits Multiplier", value: `${settings.creditsMultiplier}x`, inline: true },
       )
       .setTimestamp();
+    await interaction.editReply({ embeds: [embed] });
+  }
+
+  if (sub === "setrankreward") {
+    const rankName = interaction.options.getString("rank", true);
+    const role     = interaction.options.getRole("role");
+
+    if (!role) {
+      await removeRoleReward(guildId, rankName);
+      await interaction.editReply({ content: `✅ Removed the role reward for **${rankName}**.` });
+      return;
+    }
+
+    await setRoleReward(guildId, rankName, role.id);
+
+    const rank = RANKS.find(r => r.name === rankName);
+    await interaction.editReply({
+      embeds: [new EmbedBuilder()
+        .setColor(0x57f287)
+        .setTitle("✅ Rank Reward Set")
+        .setDescription(`Members who reach **${rank?.emoji ?? ""} ${rankName}** will automatically receive <@&${role.id}>.`)
+        .addFields(
+          { name: "Rank",  value: `${rank?.emoji ?? ""} ${rankName}`, inline: true },
+          { name: "Role",  value: `<@&${role.id}>`,                   inline: true },
+        )
+        .setTimestamp()],
+    });
+  }
+
+  if (sub === "viewrankrewards") {
+    const rewards = await getGuildRoleRewards(guildId);
+
+    const embed = new EmbedBuilder()
+      .setColor(0x5865f2)
+      .setTitle("🏆 Rank Role Rewards")
+      .setTimestamp();
+
+    if (rewards.length === 0) {
+      embed.setDescription("No rank role rewards configured yet.\nUse `/admin setrankreward` to link roles to ranks.");
+    } else {
+      const sorted = [...RANKS].map(r => {
+        const reward = rewards.find(rw => rw.rankName === r.name);
+        return reward
+          ? `${r.emoji} **${r.name}** → <@&${reward.roleId}>`
+          : `${r.emoji} **${r.name}** → *not configured*`;
+      });
+      embed.setDescription(sorted.join("\n"));
+    }
+
     await interaction.editReply({ embeds: [embed] });
   }
 }
