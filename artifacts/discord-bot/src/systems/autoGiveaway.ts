@@ -134,7 +134,7 @@ async function getOrCreatePingRole(client: Client, guildId: string): Promise<Rol
   // Create it
   const created = await guild.roles.create({
     name:        "Giveaway Ping",
-    color:       0xffd700,
+    colors:      [0xffd700],
     mentionable: true,
     reason:      "Auto-created for giveaway ping notifications",
   }).catch(() => null);
@@ -291,12 +291,15 @@ async function resolveChannel(client: Client, guildId: string): Promise<string |
     if (dbCh) return dbCh.id;
   }
 
-  // 2. Search by name variants
+  // 2. Search by name variants (text + announcement channels)
   await guild.channels.fetch().catch(() => {});
-  const ch = guild.channels.cache.find(c => {
-    if (c.type !== 0) return false;
+
+  const textChannels = [...guild.channels.cache.values()].filter(c => c.type === 0 || c.type === 5);
+  console.log(`[AutoGiveaway] Visible text channels: ${textChannels.map(c => `"${c.name}"`).join(", ")}`);
+
+  const ch = textChannels.find(c => {
     const norm = c.name.toLowerCase().replace(/[\s_]/g, "-");
-    return CHANNEL_NAME_VARIANTS.includes(norm);
+    return CHANNEL_NAME_VARIANTS.includes(norm) || c.name.toLowerCase().includes("giveaway");
   });
 
   if (ch) {
