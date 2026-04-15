@@ -53,6 +53,7 @@ export const discordGuildSettings = pgTable("discord_guild_settings", {
   welcomeChannelId: text("welcome_channel_id"),
   levelUpChannelId: text("level_up_channel_id"),
   giveawayChannelId: text("giveaway_channel_id"),
+  messageRewardChannelId: text("message_reward_channel_id"),
   loggingChannelId: text("logging_channel_id"),
   boosterGiveawayChannelId: text("booster_giveaway_channel_id"),
   lastBoosterGiveawayAt: timestamp("last_booster_giveaway_at"),

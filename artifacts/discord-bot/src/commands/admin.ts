@@ -56,6 +56,7 @@ export const data = new SlashCommandBuilder()
       .addChannelOption((opt) => opt.setName("credits_channel").setDescription("Channel for credit notifications").setRequired(false))
       .addChannelOption((opt) => opt.setName("levelup_channel").setDescription("Channel for level-up announcements").setRequired(false))
       .addChannelOption((opt) => opt.setName("giveaway_channel").setDescription("Default giveaway channel").setRequired(false))
+      .addChannelOption((opt) => opt.setName("message_reward_channel").setDescription("Channel for 10/50 message milestone reward notifications").setRequired(false))
       .addNumberOption((opt) => opt.setName("xp_multiplier").setDescription("XP multiplier (e.g. 2.0 = double XP)").setRequired(false).setMinValue(0.1).setMaxValue(10))
       .addNumberOption((opt) => opt.setName("credits_multiplier").setDescription("Credits multiplier").setRequired(false).setMinValue(0.1).setMaxValue(10))
   )
@@ -158,18 +159,20 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   if (sub === "setup") {
-    const creditsChannel = interaction.options.getChannel("credits_channel");
-    const levelupChannel = interaction.options.getChannel("levelup_channel");
-    const giveawayChannel = interaction.options.getChannel("giveaway_channel");
-    const xpMult = interaction.options.getNumber("xp_multiplier");
-    const creditsMult = interaction.options.getNumber("credits_multiplier");
+    const creditsChannel      = interaction.options.getChannel("credits_channel");
+    const levelupChannel      = interaction.options.getChannel("levelup_channel");
+    const giveawayChannel     = interaction.options.getChannel("giveaway_channel");
+    const messageRewardChannel = interaction.options.getChannel("message_reward_channel");
+    const xpMult              = interaction.options.getNumber("xp_multiplier");
+    const creditsMult         = interaction.options.getNumber("credits_multiplier");
 
     const updates: Record<string, unknown> = {};
-    if (creditsChannel) updates.creditsChannelId = creditsChannel.id;
-    if (levelupChannel) updates.levelUpChannelId = levelupChannel.id;
-    if (giveawayChannel) updates.giveawayChannelId = giveawayChannel.id;
-    if (xpMult != null) updates.xpMultiplier = xpMult;
-    if (creditsMult != null) updates.creditsMultiplier = creditsMult;
+    if (creditsChannel)       updates.creditsChannelId       = creditsChannel.id;
+    if (levelupChannel)       updates.levelUpChannelId       = levelupChannel.id;
+    if (giveawayChannel)      updates.giveawayChannelId      = giveawayChannel.id;
+    if (messageRewardChannel) updates.messageRewardChannelId = messageRewardChannel.id;
+    if (xpMult != null)       updates.xpMultiplier           = xpMult;
+    if (creditsMult != null)  updates.creditsMultiplier      = creditsMult;
 
     await updateGuildSettings(guildId, updates as Parameters<typeof updateGuildSettings>[1]);
 
@@ -179,11 +182,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       .setTimestamp();
 
     const setupFields = [
-      creditsChannel ? { name: "Credits Channel", value: `<#${creditsChannel.id}>`, inline: true } : null,
-      levelupChannel ? { name: "Level-up Channel", value: `<#${levelupChannel.id}>`, inline: true } : null,
-      giveawayChannel ? { name: "Giveaway Channel", value: `<#${giveawayChannel.id}>`, inline: true } : null,
-      xpMult != null ? { name: "XP Multiplier", value: `${xpMult}x`, inline: true } : null,
-      creditsMult != null ? { name: "Credits Multiplier", value: `${creditsMult}x`, inline: true } : null,
+      creditsChannel       ? { name: "Credits Channel",        value: `<#${creditsChannel.id}>`,       inline: true } : null,
+      levelupChannel       ? { name: "Level-up Channel",       value: `<#${levelupChannel.id}>`,       inline: true } : null,
+      giveawayChannel      ? { name: "Giveaway Channel",       value: `<#${giveawayChannel.id}>`,      inline: true } : null,
+      messageRewardChannel ? { name: "Msg Reward Channel",     value: `<#${messageRewardChannel.id}>`, inline: true } : null,
+      xpMult != null       ? { name: "XP Multiplier",          value: `${xpMult}x`,                    inline: true } : null,
+      creditsMult != null  ? { name: "Credits Multiplier",     value: `${creditsMult}x`,               inline: true } : null,
     ].filter((f): f is { name: string; value: string; inline: boolean } => f !== null);
     if (setupFields.length > 0) embed.addFields(...setupFields);
     await interaction.editReply({ embeds: [embed] });
@@ -195,11 +199,12 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       .setColor(0x5865f2)
       .setTitle("Server Configuration")
       .addFields(
-        { name: "Credits Channel", value: settings.creditsChannelId ? `<#${settings.creditsChannelId}>` : "Not set", inline: true },
-        { name: "Level-up Channel", value: settings.levelUpChannelId ? `<#${settings.levelUpChannelId}>` : "Not set", inline: true },
-        { name: "Giveaway Channel", value: settings.giveawayChannelId ? `<#${settings.giveawayChannelId}>` : "Not set", inline: true },
-        { name: "XP Multiplier", value: `${settings.xpMultiplier}x`, inline: true },
-        { name: "Credits Multiplier", value: `${settings.creditsMultiplier}x`, inline: true },
+        { name: "Credits Channel",      value: settings.creditsChannelId       ? `<#${settings.creditsChannelId}>` : "Not set",       inline: true },
+        { name: "Level-up Channel",   value: settings.levelUpChannelId       ? `<#${settings.levelUpChannelId}>` : "Not set",       inline: true },
+        { name: "Giveaway Channel",   value: settings.giveawayChannelId      ? `<#${settings.giveawayChannelId}>` : "Not set",      inline: true },
+        { name: "Msg Reward Channel", value: settings.messageRewardChannelId ? `<#${settings.messageRewardChannelId}>` : "Not set", inline: true },
+        { name: "XP Multiplier",      value: `${settings.xpMultiplier}x`,                                                           inline: true },
+        { name: "Credits Multiplier", value: `${settings.creditsMultiplier}x`,                                                      inline: true },
       )
       .setTimestamp();
     await interaction.editReply({ embeds: [embed] });

@@ -72,10 +72,10 @@ export async function handleMessage(client: Client, message: Message) {
 
   if (milestoneType) {
     const afterMilestone = await addCredits(message.author.id, message.guild.id, milestoneReward);
-    const rewardChannelId = settings.creditsChannelId ?? settings.levelUpChannelId;
+    const rewardChannelId = settings.messageRewardChannelId;
     const rewardCh = rewardChannelId
       ? message.guild.channels.cache.get(rewardChannelId) as TextChannel | undefined
-      : message.channel as TextChannel;
+      : undefined;
 
     if (milestoneType === "50") {
       const milestoneEmbed = new EmbedBuilder()
