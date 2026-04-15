@@ -56,7 +56,7 @@ export async function handleMessage(client: Client, message: Message) {
   });
 
   // ── Message milestone rewards ──────────────────────────────────────────────
-  const MILESTONE_50_REWARD = 100_000_000;
+  const MILESTONE_50_REWARD = 25_000_000;
   const MILESTONE_10_REWARD = 1_000_000;
 
   let milestoneReward = 0;
@@ -111,7 +111,7 @@ export async function handleMessage(client: Client, message: Message) {
           { name: "💬 Total Messages",value: `${formatNumber(newMsgCount)}`,                  inline: true },
         )
         .setThumbnail(message.author.displayAvatarURL({ size: 64 }))
-        .setFooter({ text: "Every 50 messages earns 100M gems!" })
+        .setFooter({ text: "Every 50 messages earns 25M gems!" })
         .setTimestamp();
 
       await rewardCh?.send({ content: `<@${message.author.id}>`, embeds: [milestoneEmbed] }).catch(() => {});
