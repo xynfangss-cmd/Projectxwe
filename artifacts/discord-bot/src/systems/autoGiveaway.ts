@@ -5,6 +5,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   TextChannel,
+  Role,
 } from "discord.js";
 import { getOrCreateGuildSettings, updateGuildSettings, getOrCreateUser, updateUser } from "../utils/db.js";
 import { formatNumber } from "../utils/constants.js";
@@ -107,6 +108,43 @@ function buildRow(roundId: string, disabled = false): ActionRowBuilder<ButtonBui
   );
 }
 
+// ── Find or create the "Giveaway Ping" role ───────────────────────────────────
+async function getOrCreatePingRole(client: Client, guildId: string): Promise<Role | null> {
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) return null;
+
+  // Check DB cache first
+  const settings = await getOrCreateGuildSettings(guildId).catch(() => null);
+  if (settings?.giveawayPingRoleId) {
+    const cached = guild.roles.cache.get(settings.giveawayPingRoleId) ??
+      await guild.roles.fetch(settings.giveawayPingRoleId).catch(() => null);
+    if (cached) return cached;
+  }
+
+  // Try to find by name
+  await guild.roles.fetch().catch(() => {});
+  const existing = guild.roles.cache.find(
+    r => r.name.toLowerCase() === "giveaway ping"
+  );
+  if (existing) {
+    await updateGuildSettings(guildId, { giveawayPingRoleId: existing.id }).catch(() => {});
+    return existing;
+  }
+
+  // Create it
+  const created = await guild.roles.create({
+    name:        "Giveaway Ping",
+    color:       0xffd700,
+    mentionable: true,
+    reason:      "Auto-created for giveaway ping notifications",
+  }).catch(() => null);
+
+  if (created) {
+    await updateGuildSettings(guildId, { giveawayPingRoleId: created.id }).catch(() => {});
+  }
+  return created;
+}
+
 // ── Post a giveaway ───────────────────────────────────────────────────────────
 async function postGiveaway(client: Client, guildId: string, channelId: string): Promise<void> {
   const guild = client.guilds.cache.get(guildId);
@@ -129,8 +167,15 @@ async function postGiveaway(client: Client, guildId: string, channelId: string):
   };
   activeRounds.set(roundId, round);
 
+  // Use Giveaway Ping role instead of @everyone
+  const pingRole   = await getOrCreatePingRole(client, guildId);
+  const pingContent = pingRole
+    ? `<@&${pingRole.id}> 🎉 A new giveaway has started!`
+    : "🎉 A new giveaway has started!";
+
   const msg = await channel.send({
-    content: "@everyone 🎉 A new giveaway has started!",
+    content: pingContent,
+    allowedMentions: { roles: pingRole ? [pingRole.id] : [] },
     embeds: [buildEmbed(round)],
     components: [buildRow(roundId)],
   }).catch(() => null);
