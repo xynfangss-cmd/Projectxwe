@@ -266,6 +266,9 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
 
     const member = interaction.member as GuildMember;
 
+    // Ensure roles are fully loaded
+    await guild.roles.fetch().catch(() => {});
+
     // Find the Unverified and Member roles
     const unverifiedRole = guild.roles.cache.find(
       (r: Role) => r.name.toLowerCase() === "unverified"
@@ -274,22 +277,28 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
       (r: Role) => r.name.toLowerCase() === "member"
     );
 
-    if (!unverifiedRole || !memberRole) {
-      await interaction.editReply({ content: "⚠️ Verification system is not fully set up. Ask an admin to run `/setupverify`." });
+    if (!memberRole) {
+      await interaction.editReply({ content: "⚠️ Could not find a role named **Member**. Ask an admin to create it and run `/setupverify`." });
       return;
     }
 
-    // Already verified (has Member role, no longer Unverified)
+    // Already verified (has Member role)
     if (member.roles.cache.has(memberRole.id)) {
       await interaction.editReply({ content: "✅ You are already verified!" });
       return;
     }
 
-    // Swap roles: remove Unverified, add Member — opens the whole server
-    await Promise.all([
-      member.roles.remove(unverifiedRole, "Member verified").catch(() => {}),
-      member.roles.add(memberRole, "Member verified").catch(() => {}),
-    ]);
+    // Swap roles: remove Unverified, add Member
+    try {
+      await member.roles.add(memberRole, "Member verified");
+      if (unverifiedRole) await member.roles.remove(unverifiedRole, "Member verified").catch(() => {});
+    } catch (roleErr) {
+      console.error("[Verify] Failed to assign Member role:", roleErr);
+      await interaction.editReply({
+        content: "⚠️ I couldn't assign the **Member** role. Please make sure my role is above **Member** in Server Settings → Roles, and that I have the **Manage Roles** permission.",
+      });
+      return;
+    }
 
     // Give 100M gems to the new member
     const INVITE_REWARD = 100_000_000;
