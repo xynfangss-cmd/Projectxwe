@@ -103,7 +103,7 @@ export async function getLeaderboardByGems(guildId: string, limit = 10) {
     .select()
     .from(discordUsers)
     .where(eq(discordUsers.guildId, guildId))
-    .orderBy(desc(discordUsers.gems))
+    .orderBy(desc(discordUsers.credits))
     .limit(limit);
 }
 
@@ -114,7 +114,7 @@ export async function getUserGemsRank(userId: string, guildId: string): Promise<
     .where(
       and(
         eq(discordUsers.guildId, guildId),
-        sql`gems > (SELECT gems FROM discord_users WHERE user_id = ${userId} AND guild_id = ${guildId})`
+        sql`credits > (SELECT credits FROM discord_users WHERE user_id = ${userId} AND guild_id = ${guildId})`
       )
     );
   return (result[0]?.count ?? 0) + 1;

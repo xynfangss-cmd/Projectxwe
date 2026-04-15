@@ -57,7 +57,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const pos   = i < 3 ? MEDALS[i] : (POS_EMOJI[i - 3] ?? `**\`#${i + 1}\`**`);
     const tier  = getRankForCredits(u.totalCreditsEarned);
     const value = isGems
-      ? `**${formatNumber(u.gems)}** 💎`
+      ? `**${formatNumber(u.credits)}** 💎`
       : `**${formatNumber(u.xp)} XP** ・ Lv.${u.level}`;
 
     return `${pos} <@${u.userId}> ${tier.emoji} ・ ${value}`;
@@ -74,7 +74,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     ]);
     const callerTier  = getRankForCredits(callerDb.totalCreditsEarned);
     const callerValue = isGems
-      ? `${formatNumber(callerDb.gems)} 💎`
+      ? `${formatNumber(callerDb.credits)} 💎`
       : `${formatNumber(callerDb.xp)} XP ・ Lv.${callerDb.level}`;
 
     callerLine = `\n\n**Your position:**\n\`#${callerPos}\` <@${callerId}> ${callerTier.emoji} ・ ${callerValue}`;
